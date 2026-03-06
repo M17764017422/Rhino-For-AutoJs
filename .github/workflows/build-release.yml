@@ -57,7 +57,7 @@ jobs:
   publish-github-packages:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -79,7 +79,7 @@ jobs:
   create-release:
     needs: [build, publish-github-packages]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
     - name: Checkout
       uses: actions/checkout@v4
