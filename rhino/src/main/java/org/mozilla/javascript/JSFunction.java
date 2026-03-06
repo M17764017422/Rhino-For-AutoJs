@@ -41,7 +41,7 @@ public class JSFunction extends BaseFunction implements ScriptOrFn<JSFunction> {
     }
 
     @Override
-    protected void setPrototypeProperty(Object prototype) {
+    public void setPrototypeProperty(Object prototype) {
         super.setPrototypeProperty(prototype);
     }
 
