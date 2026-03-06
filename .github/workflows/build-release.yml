@@ -41,12 +41,26 @@ jobs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
         
-    - name: Build rhino-all
+    - name: Build rhino core (for Android)
+      run: ./gradlew :rhino:jar --no-configuration-cache
+      
+    - name: Build rhino-all (for Desktop)
       run: ./gradlew :rhino-all:shadowJar --no-configuration-cache
       
     - name: List built JARs
-      run: ls -la rhino-all/build/libs/
+      run: |
+        echo "=== Rhino Core (Android compatible) ==="
+        ls -la rhino/build/libs/
+        echo "=== Rhino All (Desktop, includes JLine) ==="
+        ls -la rhino-all/build/libs/
       
+    - name: Upload rhino core JAR artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: rhino-core
+        path: rhino/build/libs/rhino-*.jar
+        retention-days: 30
+        
     - name: Upload rhino-all JAR artifact
       uses: actions/upload-artifact@v4
       with:
@@ -71,10 +85,10 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       
-    - name: Publish to GitHub Packages
+    - name: Publish rhino core to GitHub Packages
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: ./gradlew :rhino-all:publish --no-configuration-cache
+      run: ./gradlew :rhino:publish --no-configuration-cache
 
   create-release:
     needs: [build, publish-github-packages]
@@ -84,14 +98,24 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       
-    - name: Download artifact
+    - name: Download rhino core artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: rhino-core
+        path: ./artifacts/core
+        
+    - name: Download rhino-all artifact
       uses: actions/download-artifact@v4
       with:
         name: rhino-all
-        path: ./artifacts
+        path: ./artifacts/all
         
     - name: List artifacts
-      run: ls -la ./artifacts/
+      run: |
+        echo "=== Rhino Core (Android) ==="
+        ls -la ./artifacts/core/
+        echo "=== Rhino All (Desktop) ==="
+        ls -la ./artifacts/all/
         
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
@@ -103,6 +127,10 @@ jobs:
           
           基于 mozilla/rhino，保留 AutoJs6 兼容性定制修改。
           
+          ### 包含文件
+          - `rhino-*.jar` - **核心模块（Android 兼容）**，无 JLine 依赖
+          - `rhino-all-*.jar` - 完整模块（桌面应用），包含 JLine 终端工具
+          
           ### 保留的定制修改
           - VMBridge: Android 7.x 兼容性（无 VarHandle）
           - IRFactory: StackOverflowError 修复
@@ -113,7 +141,10 @@ jobs:
           - ImporterTopLevel: String 参数支持
           
           ### 使用方法
-          下载 JAR 文件用于 AutoJs6 项目。
-        files: ./artifacts/*.jar
+          - **Android 项目**: 使用 `rhino-*.jar`（Java 11 字节码，Jetifier 兼容）
+          - **桌面应用**: 使用 `rhino-all-*.jar`（包含终端工具）
+        files: |
+          ./artifacts/core/*.jar
+          ./artifacts/all/*.jar
         draft: false
         prerelease: false
