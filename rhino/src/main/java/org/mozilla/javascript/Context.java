@@ -87,21 +87,6 @@ public class Context implements Closeable {
      */
     public static final int VERSION_DEFAULT = 0;
 
-    /** JavaScript 1.0 */
-    public static final int VERSION_1_0 = 100;
-
-    /** JavaScript 1.1 */
-    public static final int VERSION_1_1 = 110;
-
-    /** JavaScript 1.2 */
-    public static final int VERSION_1_2 = 120;
-
-    /** JavaScript 1.3 */
-    public static final int VERSION_1_3 = 130;
-
-    /** JavaScript 1.4 */
-    public static final int VERSION_1_4 = 140;
-
     /** JavaScript 1.5 */
     public static final int VERSION_1_5 = 150;
 
@@ -137,14 +122,6 @@ public class Context implements Closeable {
     public static final int VERSION_ECMASCRIPT = 250;
 
     /**
-     * Controls behaviour of {@code Date.prototype.getYear()}. If {@code
-     * hasFeature(FEATURE_NON_ECMA_GET_YEAR)} returns true, Date.prototype.getYear subtructs 1900
-     * only if 1900 &lt;= date &lt; 2000. The default behavior of {@link #hasFeature(int)} is always
-     * to subtract 1900 as required by ECMAScript B.2.4.
-     */
-    public static final int FEATURE_NON_ECMA_GET_YEAR = 1;
-
-    /**
      * Control if member expression as function name extension is available. If {@code
      * hasFeature(FEATURE_MEMBER_EXPR_AS_FUNCTION_NAME)} returns true, allow {@code function
      * memberExpression(args) { body }} to be syntax sugar for {@code memberExpression =
@@ -162,19 +139,6 @@ public class Context implements Closeable {
      * <p>By default {@link #hasFeature(int)} returns false.
      */
     public static final int FEATURE_RESERVED_KEYWORD_AS_IDENTIFIER = 3;
-
-    /**
-     * Control if {@code toString()} should returns the same result as {@code toSource()} when
-     * applied to objects and arrays. If {@code hasFeature(FEATURE_TO_STRING_AS_SOURCE)} returns
-     * true, calling {@code toString()} on JS objects gives the same result as calling {@code
-     * toSource()}. That is it returns JS source with code to create an object with all enumerable
-     * fields of the original object instead of printing <code>[object <i>result of
-     * {@link Scriptable#getClassName()}</i>]</code>.
-     *
-     * <p>By default {@link #hasFeature(int)} returns true only if the current JS version is set to
-     * {@link #VERSION_1_2}.
-     */
-    public static final int FEATURE_TO_STRING_AS_SOURCE = 4;
 
     /**
      * Control if properties {@code __proto__} and {@code __parent__} are treated specially. If
@@ -689,7 +653,7 @@ public class Context implements Closeable {
      * <p>The language version number affects JavaScript semantics as detailed in the overview
      * documentation.
      *
-     * @return an integer that is one of VERSION_1_0, VERSION_1_1, etc.
+     * @return an integer that is one of VERSION_1_5, VERSION_1_6, etc.
      */
     public final int getLanguageVersion() {
         return version;
@@ -713,7 +677,7 @@ public class Context implements Closeable {
      * Rhino are encouraged to migrate to the {@link #VERSION_ECMASCRIPT} version and stop relying
      * on older behaviors of Rhino that are no longer compatible with ECMAScript.
      *
-     * @param version the version as specified by VERSION_1_0, VERSION_1_1, etc.
+     * @param version the version as specified by VERSION_1_5, VERSION_1_6, etc.
      */
     public void setLanguageVersion(int version) {
         if (sealed) onSealedMutation();
@@ -732,11 +696,6 @@ public class Context implements Closeable {
     public static boolean isValidLanguageVersion(int version) {
         switch (version) {
             case VERSION_DEFAULT:
-            case VERSION_1_0:
-            case VERSION_1_1:
-            case VERSION_1_2:
-            case VERSION_1_3:
-            case VERSION_1_4:
             case VERSION_1_5:
             case VERSION_1_6:
             case VERSION_1_7:
@@ -2320,10 +2279,8 @@ public class Context implements Closeable {
      *
      * @param featureIndex feature index to check
      * @return true if the {@code featureIndex} feature is turned on
-     * @see #FEATURE_NON_ECMA_GET_YEAR
      * @see #FEATURE_MEMBER_EXPR_AS_FUNCTION_NAME
      * @see #FEATURE_RESERVED_KEYWORD_AS_IDENTIFIER
-     * @see #FEATURE_TO_STRING_AS_SOURCE
      * @see #FEATURE_PARENT_PROTO_PROPRTIES
      * @see #FEATURE_E4X
      * @see #FEATURE_DYNAMIC_SCOPE
@@ -2494,15 +2451,44 @@ public class Context implements Closeable {
      * "evaluate" functions. Frameworks that call Function objects directly should call this
      * function to ensure that everything completes if they want all Promises to eventually resolve.
      * This function is idempotent, but the microtask queue is not thread-safe.
+     *
+     * <p>Nothing will happen if suspendMicrotaskProcessing was called.
+     *
+     * @see #suspendMicrotaskProcessing()
      */
     public void processMicrotasks() {
         Runnable head;
-        do {
-            head = microtasks.poll();
-            if (head != null) {
-                head.run();
-            }
-        } while (head != null);
+        while (microtaskSuspendCount == 0 && (head = microtasks.poll()) != null) {
+            head.run();
+        }
+    }
+
+    /**
+     * Temporarily suspend microtask processing. Tasks will be resumed again when
+     * resumeMicrotaskProcessing() is called. Suspensions are cumulative -- each call to this method
+     * increases the suspend count, and microtasks will resume when the count again reaches zero.
+     * This can be used in complex frameworks that wish to execute multiple individual scripts
+     * before promises are resolved to emulate the behavior of some web browsers and other
+     * frameworks. The suspend count is not thread safe.
+     *
+     * @see #resumeMicrotaskProcessing()
+     */
+    public void suspendMicrotaskProcessing() {
+        microtaskSuspendCount++;
+    }
+
+    /**
+     * Resume microtask processing after a suspend. Each call to suspendMicrotaskProcessing() must
+     * be matched with a call to this function in order for processing to resume.
+     *
+     * @see #suspendMicrotaskProcessing()
+     */
+    public void resumeMicrotaskProcessing() {
+        assert microtaskSuspendCount > 0;
+        microtaskSuspendCount--;
+        if (microtaskSuspendCount == 0) {
+            processMicrotasks();
+        }
     }
 
     /**
@@ -2723,7 +2709,7 @@ public class Context implements Closeable {
     }
 
     final boolean isVersionECMA1() {
-        return version == VERSION_DEFAULT || version >= VERSION_1_3;
+        return true;
     }
 
     // The method must NOT be public or protected
@@ -2799,7 +2785,7 @@ public class Context implements Closeable {
     // for Objects, Arrays to tag themselves as being printed out,
     // so they don't print themselves out recursively.
     // Use ObjToIntMap instead of java.util.HashSet for JDK 1.1 compatibility
-    Set<Scriptable> iterating;
+    Set<Object> iterating;
 
     Object interpreterSecurityDomain;
 
@@ -2827,6 +2813,7 @@ public class Context implements Closeable {
     private ClassLoader applicationClassLoader;
     private UnaryOperator<Object> javaToJSONConverter;
     private final ArrayDeque<Runnable> microtasks = new ArrayDeque<>();
+    private int microtaskSuspendCount;
     private final UnhandledRejectionTracker unhandledPromises = new UnhandledRejectionTracker();
 
     /** This is the list of names of objects forcing the creation of function activation records. */

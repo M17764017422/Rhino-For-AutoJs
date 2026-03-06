@@ -7,6 +7,7 @@
 package org.mozilla.javascript;
 
 import java.util.EnumSet;
+import org.mozilla.javascript.xml.XMLObject;
 
 /**
  * The base class for Function objects. That is one of two purposes. It is also the prototype for
@@ -69,6 +70,16 @@ public class BaseFunction extends ScriptableObject implements Function {
         if (cx.getLanguageVersion() >= Context.VERSION_ES6) {
             ctor.setStandardPropertyAttributes(READONLY | DONTENUM);
         }
+
+        if (!cx.isStrictMode() && cx.getLanguageVersion() >= Context.VERSION_ES6) {
+            ctor.definePrototypeProperty(
+                    cx,
+                    "arguments",
+                    BaseFunction::js_protoArgumentsGetter,
+                    BaseFunction::js_protoArgumentsSetter,
+                    DONTENUM | READONLY);
+        }
+
         ScriptableObject.defineProperty(scope, FUNCTION_CLASS, ctor, DONTENUM);
         if (sealed) {
             ctor.sealObject();
@@ -177,20 +188,21 @@ public class BaseFunction extends ScriptableObject implements Function {
                 DONTENUM | READONLY,
                 BaseFunction::nameGetter,
                 BaseFunction::nameSetter);
-        if (includeNonStandardProps()) {
+
+        Context cx = Context.getCurrentContext();
+        if (cx == null || !cx.isStrictMode()) {
             ScriptableObject.defineBuiltInProperty(
                     this, "arity", PERMANENT | DONTENUM | READONLY, BaseFunction::arityGetter);
-            ScriptableObject.defineBuiltInProperty(
-                    this,
-                    "arguments",
-                    PERMANENT | DONTENUM,
-                    BaseFunction::argumentsGetter,
-                    BaseFunction::argumentsSetter);
-        }
-    }
 
-    protected boolean includeNonStandardProps() {
-        return !Context.isCurrentContextStrict();
+            if (cx == null || cx.getLanguageVersion() < Context.VERSION_ES6) {
+                ScriptableObject.defineBuiltInProperty(
+                        this,
+                        "arguments",
+                        PERMANENT | DONTENUM,
+                        BaseFunction::argumentsGetter,
+                        BaseFunction::argumentsSetter);
+            }
+        }
     }
 
     private static Object lengthGetter(BaseFunction function, Scriptable start) {
@@ -358,6 +370,17 @@ public class BaseFunction extends ScriptableObject implements Function {
      */
     @Override
     public boolean hasInstance(Scriptable instance) {
+        Context cx = Context.getCurrentContext();
+
+        // Attempt to call custom Symbol.hasInstance implementation if present
+
+        Object hasInstanceMethod = ScriptRuntime.getObjectElem(this, SymbolKey.HAS_INSTANCE, cx);
+        if (hasInstanceMethod instanceof Callable) {
+            return ScriptRuntime.toBoolean(
+                    ((Callable) hasInstanceMethod)
+                            .call(cx, getParentScope(), this, new Object[] {instance}));
+        }
+
         Object protoProp = ScriptableObject.getProperty(this, PROTOTYPE_PROPERTY_NAME);
         if (protoProp instanceof Scriptable) {
             return ScriptRuntime.jsDelegatesTo(instance, (Scriptable) protoProp);
@@ -395,7 +418,7 @@ public class BaseFunction extends ScriptableObject implements Function {
             protoProp = ScriptableObject.getProperty(thisObj, PROTOTYPE_PROPERTY_NAME);
         }
 
-        if (ScriptRuntime.isObject(protoProp)) {
+        if (ScriptRuntime.isObject(protoProp) || protoProp instanceof XMLObject) {
             if (args.length > 0 && args[0] instanceof Scriptable) {
                 Scriptable obj = (Scriptable) args[0];
 
@@ -627,6 +650,14 @@ public class BaseFunction extends ScriptableObject implements Function {
         return 0;
     }
 
+    private static Object js_protoArgumentsGetter(Scriptable thisObj) {
+        return LambdaConstructor.convertThisObject(thisObj, BaseFunction.class).getArguments();
+    }
+
+    private static void js_protoArgumentsSetter(Scriptable thisObj, Object value) {
+        LambdaConstructor.convertThisObject(thisObj, BaseFunction.class).setArguments(value);
+    }
+
     public String getFunctionName() {
         return "";
     }
@@ -713,7 +744,7 @@ public class BaseFunction extends ScriptableObject implements Function {
         return obj;
     }
 
-    private Object getArguments() {
+    Object getArguments() {
         // <Function name>.arguments is deprecated, so we use a slow
         // way of getting it that doesn't add to the invocation cost.
         // TODO: add warning, error based on version
@@ -731,12 +762,17 @@ public class BaseFunction extends ScriptableObject implements Function {
         if (activation == null) {
             return null;
         }
+        if (activation.isStrict && cx.getLanguageVersion() >= Context.VERSION_ES6) {
+            ScriptRuntime.ThrowTypeError.throwNotAllowed();
+        }
         Object arguments = activation.get("arguments", activation);
         if (arguments instanceof Arguments && cx.getLanguageVersion() >= Context.VERSION_ES6) {
             return new Arguments.ReadonlyArguments((Arguments) arguments, cx);
         }
         return arguments;
     }
+
+    void setArguments(Object caller) {}
 
     private static Scriptable jsConstructor(
             Context cx, Scriptable scope, Object[] args, boolean isGeneratorFunction) {
@@ -747,16 +783,7 @@ public class BaseFunction extends ScriptableObject implements Function {
         if (isGeneratorFunction) {
             sourceBuf.append("* ");
         }
-        /* version != 1.2 Function constructor behavior -
-         * print 'anonymous' as the function name if the
-         * version (under which the function was compiled) is
-         * less than 1.2... or if it's greater than 1.2, because
-         * we need to be closer to ECMA.
-         */
-        if (cx.getLanguageVersion() != Context.VERSION_1_2) {
-            sourceBuf.append("anonymous");
-        }
-        sourceBuf.append('(');
+        sourceBuf.append("anonymous(");
 
         // Append arguments as coma separated strings
         for (int i = 0; i < arglen - 1; i++) {
@@ -806,7 +833,13 @@ public class BaseFunction extends ScriptableObject implements Function {
         return homeObject;
     }
 
-    public static final int Id_constructor = 1,
+    @Override
+    public boolean isConstructor() {
+        return !(Context.getCurrentContext().getLanguageVersion() >= Context.VERSION_ES6
+                && this.getHomeObject() != null);
+    }
+
+    private static final int Id_constructor = 1,
             Id_toString = 2,
             Id_toSource = 3,
             Id_apply = 4,

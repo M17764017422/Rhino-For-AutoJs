@@ -456,7 +456,7 @@ public class LambdaConstructor extends LambdaFunction {
      * in JavaScript doesn't necessarily map to an instance of the class.
      */
     @SuppressWarnings("unchecked")
-    public static <T> T convertThisObject(Scriptable thisObj, Class<T> targetClass) {
+    public static <T> T convertThisObject(Object thisObj, Class<T> targetClass) {
         if (!targetClass.isInstance(thisObj)) {
             throw ScriptRuntime.typeErrorById("msg.this.not.instance", targetClass.getSimpleName());
         }
@@ -469,5 +469,10 @@ public class LambdaConstructor extends LambdaFunction {
             throw ScriptRuntime.typeError("Not properly a lambda constructor");
         }
         return (ScriptableObject) prop;
+    }
+
+    @Override
+    public boolean isConstructor() {
+        return true;
     }
 }

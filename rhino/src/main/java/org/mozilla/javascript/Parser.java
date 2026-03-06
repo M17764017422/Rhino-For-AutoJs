@@ -742,6 +742,10 @@ public class Parser {
                                     if (fnNode.getDefaultParams() != null) {
                                         reportError("msg.default.args.use.strict");
                                     }
+                                    // "use strict" not allowed with non-simple params
+                                    if (fnNode.hasRestParameter()) {
+                                        reportError("msg.rest.param.use.strict");
+                                    }
                                     inUseStrictDirective = true;
                                     fnNode.setInStrictMode(true);
                                     if (!savedStrictMode) {
@@ -1085,6 +1089,10 @@ public class Parser {
                 if (!(p instanceof EmptyExpression)) {
                     arrowFunctionParams(fnNode, p, destructuring, destructuringDefault, paramNames);
                 }
+                // shouldn't have trailing comma after rest params
+                if (fnNode.hasRestParameter() && fnNode.getIntProp(Node.TRAILING_COMMA, 0) == 1) {
+                    reportError("msg.parm.after.rest");
+                }
             } else {
                 arrowFunctionParams(
                         fnNode, params, destructuring, destructuringDefault, paramNames);
@@ -1144,6 +1152,8 @@ public class Parser {
             String pname = currentScriptOrFn.getNextTempName();
             defineSymbol(Token.LP, pname, false);
             destructuring.put(pname, params);
+            // check for duplicate names in destructuring pattern
+            collectDestructuringNames(params, paramNames);
         } else if (params instanceof InfixExpression && params.getType() == Token.COMMA) {
             arrowFunctionParams(
                     fnNode,
@@ -1162,12 +1172,16 @@ public class Parser {
             String paramName = ((Name) params).getIdentifier();
             defineSymbol(Token.LP, paramName);
 
+            // disallow duplicates in arrow fns
+            if (paramNames.contains(paramName)) {
+                addError("msg.dup.param.strict", paramName);
+            }
+            paramNames.add(paramName);
+
             if (this.inUseStrictDirective) {
                 if ("eval".equals(paramName) || "arguments".equals(paramName)) {
                     reportError("msg.bad.id.strict", paramName);
                 }
-                if (paramNames.contains(paramName)) addError("msg.dup.param.strict", paramName);
-                paramNames.add(paramName);
             }
         } else if (params instanceof Assignment) {
             if (compilerEnv.getLanguageVersion() >= Context.VERSION_ES6) {
@@ -1188,6 +1202,8 @@ public class Parser {
                     defineSymbol(Token.LP, pname, false);
                     destructuring.put(pname, lhs);
                     destructuringDefault.put(pname, rhs);
+                    // check for duplicate names in destructuring pattern
+                    collectDestructuringNames(lhs, paramNames);
                 } else {
                     reportError("msg.no.parm", params.getPosition(), params.getLength());
                     fnNode.addParam(makeErrorNode());
@@ -1195,9 +1211,68 @@ public class Parser {
             } else {
                 reportError("msg.default.args");
             }
+        } else if (params instanceof Spread) {
+            // rest parameters in arrow functions
+            if (fnNode.hasRestParameter()) {
+                reportError("msg.parm.after.rest", params.getPosition(), params.getLength());
+            }
+            fnNode.setHasRestParameter(true);
+            AstNode restParam = ((Spread) params).getExpression();
+            if (restParam instanceof Name) {
+                fnNode.addParam(restParam);
+                String paramName = ((Name) restParam).getIdentifier();
+                defineSymbol(Token.LP, paramName);
+
+                // disallow duplicates in arrow functions
+                if (paramNames.contains(paramName)) {
+                    addError("msg.dup.param.strict", paramName);
+                }
+                paramNames.add(paramName);
+
+                if (this.inUseStrictDirective) {
+                    if ("eval".equals(paramName) || "arguments".equals(paramName)) {
+                        reportError("msg.bad.id.strict", paramName);
+                    }
+                }
+            } else {
+                reportError("msg.no.parm", restParam.getPosition(), restParam.getLength());
+                fnNode.addParam(makeErrorNode());
+            }
         } else {
             reportError("msg.no.parm", params.getPosition(), params.getLength());
             fnNode.addParam(makeErrorNode());
+        }
+    }
+
+    /** Collect all parameter names from a destructuring pattern */
+    private void collectDestructuringNames(AstNode pattern, Set<String> names) {
+        if (pattern instanceof Name) {
+            String name = ((Name) pattern).getIdentifier();
+            if (names.contains(name)) {
+                addError("msg.dup.param.strict", name);
+            }
+            names.add(name);
+        } else if (pattern instanceof ArrayLiteral) {
+            for (AstNode elem : ((ArrayLiteral) pattern).getElements()) {
+                if (elem instanceof EmptyExpression) {
+                    continue;
+                }
+                if (elem instanceof Spread) {
+                    // [...rest] in array destructuring
+                    collectDestructuringNames(((Spread) elem).getExpression(), names);
+                } else {
+                    collectDestructuringNames(elem, names);
+                }
+            }
+        } else if (pattern instanceof ObjectLiteral) {
+            for (AbstractObjectProperty prop : ((ObjectLiteral) pattern).getElements()) {
+                if (prop instanceof ObjectProperty) {
+                    AstNode value = ((ObjectProperty) prop).getValue();
+                    collectDestructuringNames(value, names);
+                }
+            }
+        } else if (pattern instanceof Assignment) {
+            collectDestructuringNames(((Assignment) pattern).getLeft(), names);
         }
     }
 
@@ -2702,11 +2777,6 @@ public class Parser {
                 case Token.SHNE:
                     consumeToken();
                     int parseToken = tt;
-                    if (compilerEnv.getLanguageVersion() == Context.VERSION_1_2) {
-                        // JavaScript 1.2 uses shallow equality for == and != .
-                        if (tt == Token.EQ) parseToken = Token.SHEQ;
-                        else if (tt == Token.NE) parseToken = Token.SHNE;
-                    }
                     pn = new InfixExpression(parseToken, pn, relExpr(), opPos);
                     continue;
             }
@@ -3269,7 +3339,10 @@ public class Parser {
             // handles: @name, @ns::name, @ns::*, @ns::[expr]
             case Token.NAME:
                 return propertyName(atPos, 0);
-
+            case Token.RESERVED:
+                String name = ts.getString();
+                saveNameTokenData(ts.tokenBeg, name, lineNumber(), columnNumber());
+                return propertyName(atPos, 0);
             // handles: @*, @*::name, @*::*, @*::[expr]
             case Token.MUL:
                 saveNameTokenData(ts.tokenBeg, "*", lineNumber(), columnNumber());
@@ -3280,6 +3353,16 @@ public class Parser {
                 return xmlElemRef(atPos, null, -1);
 
             default:
+                {
+                    if (compilerEnv.isReservedKeywordAsIdentifier()) {
+                        // allow keywords as property names, e.g. ({if: 1})
+                        name = Token.keywordToName(tt);
+                        if (name != null) {
+                            saveNameTokenData(ts.tokenBeg, name, lineNumber(), columnNumber());
+                            return propertyName(atPos, 0);
+                        }
+                    }
+                }
                 reportError("msg.no.name.after.xmlAttr");
                 return makeErrorNode();
         }
@@ -3304,13 +3387,19 @@ public class Parser {
             ns = name;
             colonPos = ts.tokenBeg;
 
-            switch (nextToken()) {
+            int nt = nextToken();
+            switch (nt) {
                 // handles name::name
                 case Token.NAME:
                     name = createNameNode();
                     break;
-
-                // handles name::*
+                case Token.RESERVED:
+                    {
+                        String realName = ts.getString();
+                        saveNameTokenData(ts.tokenBeg, realName, lineNumber(), columnNumber());
+                        name = createNameNode(false, -1);
+                        break;
+                    }
                 case Token.MUL:
                     saveNameTokenData(ts.tokenBeg, "*", lineNumber(), columnNumber());
                     name = createNameNode(false, -1);
@@ -3321,6 +3410,18 @@ public class Parser {
                     return xmlElemRef(atPos, ns, colonPos);
 
                 default:
+                    {
+                        if (compilerEnv.isReservedKeywordAsIdentifier()) {
+                            // allow keywords as property names, e.g. ({if: 1})
+                            String realName = Token.keywordToName(nt);
+                            if (name != null) {
+                                saveNameTokenData(
+                                        ts.tokenBeg, realName, lineNumber(), columnNumber());
+                                name = createNameNode(false, -1);
+                                break;
+                            }
+                        }
+                    }
                     reportError("msg.no.name.after.coloncolon");
                     return makeErrorNode();
             }
@@ -3479,6 +3580,30 @@ public class Parser {
             case Token.TEMPLATE_LITERAL:
                 consumeToken();
                 return templateLiteral(false);
+
+            case Token.DOTDOTDOT:
+                // spread operator for arrow function parameters
+                consumeToken();
+                if (compilerEnv.getLanguageVersion() >= Context.VERSION_ES6) {
+                    int spreadPos = ts.tokenBeg;
+                    int spreadLineno = lineNumber();
+                    int spreadColumn = columnNumber();
+                    AstNode exprNode = assignExpr();
+                    if (exprNode instanceof FunctionNode
+                            && ((FunctionNode) exprNode).getFunctionType()
+                                    == FunctionNode.ARROW_FUNCTION) {
+                        // ...x => x is invalid
+                        reportError("msg.no.parm", spreadPos, ts.tokenEnd - spreadPos);
+                        return makeErrorNode();
+                    }
+                    Spread spread = new Spread(spreadPos, ts.tokenEnd - spreadPos);
+                    spread.setLineColumnNumber(spreadLineno, spreadColumn);
+                    spread.setExpression(exprNode);
+                    return spread;
+                } else {
+                    reportError("msg.syntax");
+                }
+                break;
 
             case Token.RESERVED:
                 consumeToken();
@@ -4292,11 +4417,6 @@ public class Parser {
         } else if (compilerEnv.getActivationNames() != null
                 && compilerEnv.getActivationNames().contains(name)) {
             activation = true;
-        } else if ("length".equals(name)) {
-            if (token == Token.GETPROP && compilerEnv.getLanguageVersion() == Context.VERSION_1_2) {
-                // Use of "length" in 1.2 requires an activation object.
-                activation = true;
-            }
         }
         if (activation) {
             setRequiresActivation();
@@ -4527,7 +4647,8 @@ public class Parser {
             Transformer transformer,
             boolean isFunctionParameter) {
         Scope result = createScopeNode(Token.LETEXPR, left.getLineno(), left.getColumn());
-        result.addChildToFront(new Node(Token.LET, createName(Token.NAME, tempName, right)));
+        Node letNode = new Node(Token.LET, createName(Token.NAME, tempName, right));
+        result.addChildToFront(letNode);
         try {
             pushScope(result);
             defineSymbol(Token.LET, tempName, true);
@@ -4564,7 +4685,9 @@ public class Parser {
                             destructuringNames,
                             defaultValue,
                             transformer,
-                            isFunctionParameter);
+                            isFunctionParameter,
+                            letNode,
+                            result);
         } else if (left.getType() == Token.GETPROP || left.getType() == Token.GETELEM) {
             switch (variableType) {
                 case Token.CONST:
@@ -4752,6 +4875,48 @@ public class Parser {
                         setOp,
                         transformer,
                         isFunctionParameter);
+            } else if (n instanceof Spread) {
+                // [...rest] = [1, 2, 3]
+                // rest element should be the last
+                if (index < array.getElements().size() - 1) {
+                    reportError("msg.parm.after.rest");
+                }
+
+                AstNode restTarget = ((Spread) n).getExpression();
+
+                // call array.slice(index) to collect remaining elements
+                Node sliceCall =
+                        new Node(
+                                Token.CALL,
+                                new Node(
+                                        Token.GETPROP,
+                                        createName(tempName),
+                                        Node.newString("slice")));
+                sliceCall.addChildToBack(createNumber(index));
+
+                if (restTarget.getType() == Token.NAME) {
+                    // [...rest]
+                    String name = restTarget.getString();
+
+                    parent.addChildToBack(
+                            new Node(setOp, createName(Token.BINDNAME, name, null), sliceCall));
+
+                    if (variableType != -1) {
+                        defineSymbol(variableType, name, true);
+                        destructuringNames.add(name);
+                    }
+                } else {
+                    // [...[x, y]] or [...{length}]
+                    parent.addChildToBack(
+                            destructuringAssignmentHelper(
+                                    variableType,
+                                    restTarget,
+                                    sliceCall,
+                                    currentScriptOrFn.getNextTempName(),
+                                    null,
+                                    transformer,
+                                    isFunctionParameter));
+                }
             } else {
                 parent.addChildToBack(
                         destructuringAssignmentHelper(
@@ -4914,16 +5079,71 @@ public class Parser {
             List<String> destructuringNames,
             AstNode defaultValue, /* defaultValue to use in function param decls */
             Transformer transformer,
-            boolean isFunctionParameter) {
+            boolean isFunctionParameter,
+            Node letNode,
+            Scope letExprScope) {
         boolean empty = true;
         int setOp = variableType == Token.CONST ? Token.SETCONST : Token.SETNAME;
         boolean defaultValuesSetup = false;
+        List<Object> extractedKeys = new ArrayList<>(); // store strings or nodes for computed keys
 
-        for (AbstractObjectProperty abstractProp : node.getElements()) {
+        // Track position to validate rest element is last
+        List<AbstractObjectProperty> elements = node.getElements();
+        int elementIndex = 0;
+
+        for (AbstractObjectProperty abstractProp : elements) {
             if (abstractProp instanceof SpreadObjectProperty) {
-                reportError("msg.no.object.rest");
-                return false;
+                // Validate that rest element is in last position
+                if (elementIndex < elements.size() - 1) {
+                    reportError("msg.rest.must.be.last");
+                    return false;
+                }
+                // Handle object rest properties: {a, b, ...rest}
+                SpreadObjectProperty spreadProp = (SpreadObjectProperty) abstractProp;
+                Spread spread = spreadProp.getSpreadNode();
+                AstNode restTarget = spread.getExpression();
+
+                // Setup default value if needed (must happen before OBJECT_REST uses tempName)
+                if (defaultValue != null && !defaultValuesSetup) {
+                    setupDefaultValues(tempName, parent, defaultValue, setOp, transformer);
+                    defaultValuesSetup = true;
+                }
+
+                // copy source excluding extracted keys
+                Node restOp = new Node(Token.OBJECT_REST);
+                restOp.putProp(
+                        Node.OBJECT_IDS_PROP,
+                        extractedKeys.toArray(
+                                new Object[0])); // store excluded keys (Strings or Nodes)
+                restOp.addChildToBack(createName(tempName)); // source
+
+                if (restTarget.getType() == Token.NAME) {
+                    // Simple name: {...rest}
+                    String restName = ((Name) restTarget).getIdentifier();
+
+                    parent.addChildToBack(
+                            new Node(setOp, createName(Token.BINDNAME, restName, null), restOp));
+
+                    if (variableType != -1) {
+                        defineSymbol(variableType, restName, true);
+                        destructuringNames.add(restName);
+                    }
+                } else {
+                    // Pattern: ...{x, y} or ...[length]
+                    // Collect rest object into temporary, then destructure
+                    parent.addChildToBack(
+                            destructuringAssignmentHelper(
+                                    variableType,
+                                    restTarget,
+                                    restOp,
+                                    currentScriptOrFn.getNextTempName(),
+                                    null,
+                                    transformer,
+                                    isFunctionParameter));
+                }
+                break; // rest must be the last argument
             }
+
             ObjectProperty prop = (ObjectProperty) abstractProp;
 
             int lineno = 0, column = 0;
@@ -4937,18 +5157,48 @@ public class Parser {
             AstNode id = prop.getKey();
 
             Node rightElem = null;
+            String keyName = null;
             if (id instanceof Name) {
-                Node s = Node.newString(((Name) id).getIdentifier());
+                keyName = ((Name) id).getIdentifier();
+                Node s = Node.newString(keyName);
                 rightElem = new Node(Token.GETPROP, createName(tempName), s);
+                extractedKeys.add(keyName);
             } else if (id instanceof StringLiteral) {
-                Node s = Node.newString(((StringLiteral) id).getValue());
+                keyName = ((StringLiteral) id).getValue();
+                Node s = Node.newString(keyName);
                 rightElem = new Node(Token.GETPROP, createName(tempName), s);
+                extractedKeys.add(keyName);
             } else if (id instanceof NumberLiteral) {
                 Node s = createNumber((int) ((NumberLiteral) id).getNumber());
                 rightElem = new Node(Token.GETELEM, createName(tempName), s);
             } else if (id instanceof ComputedPropertyKey) {
-                reportError("msg.bad.computed.property.in.destruct");
-                return false;
+                // handle computed property key: [...key]
+                // Create a temp variable for the computed key within the LETEXPR scope
+                // to ensure the expression is only evaluated once
+                AstNode computedExpr = ((ComputedPropertyKey) id).getExpression();
+                String keyTempName = currentScriptOrFn.getNextTempName();
+
+                Node tempVar;
+                if (transformer != null) {
+                    Node keyExpr = transformer.transform(computedExpr);
+                    tempVar = createName(Token.NAME, keyTempName, keyExpr);
+                } else {
+                    tempVar = createName(Token.NAME, keyTempName, computedExpr);
+                    currentScriptOrFn.putDestructuringRvalues(tempVar, computedExpr);
+                }
+                letNode.addChildToBack(tempVar);
+
+                // define the computed property temp
+                pushScope(letExprScope);
+                try {
+                    defineSymbol(Token.LET, keyTempName, true);
+                } finally {
+                    popScope();
+                }
+
+                Node keyRef = createName(keyTempName);
+                extractedKeys.add(keyRef);
+                rightElem = new Node(Token.GETELEM, createName(tempName), keyRef);
             } else {
                 throw codeBug();
             }
@@ -4990,6 +5240,7 @@ public class Parser {
                                 isFunctionParameter));
             }
             empty = false;
+            elementIndex++;
         }
         return empty;
     }
@@ -5132,6 +5383,24 @@ public class Parser {
     void markDestructuring(AstNode node) {
         if (node instanceof DestructuringForm) {
             ((DestructuringForm) node).setIsDestructuring(true);
+            // rest element should be positioned in the last
+            if (node instanceof ArrayLiteral) {
+                ArrayLiteral array = (ArrayLiteral) node;
+                List<AstNode> elements = array.getElements();
+                for (int i = 0; i < elements.size(); i++) {
+                    AstNode e = elements.get(i);
+                    if (e instanceof Spread && i < elements.size() - 1) {
+                        reportError("msg.parm.after.rest");
+                    }
+                }
+                // check for trailing comma after rest: [...x,]
+                // destructuringLength should be > elements.size()
+                if (!elements.isEmpty()
+                        && elements.get(elements.size() - 1) instanceof Spread
+                        && array.getDestructuringLength() > elements.size()) {
+                    reportError("msg.parm.after.rest");
+                }
+            }
         } else if (node instanceof ParenthesizedExpression) {
             markDestructuring(((ParenthesizedExpression) node).getExpression());
         }

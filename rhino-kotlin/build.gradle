@@ -5,13 +5,22 @@ plugins {
 
 dependencies {
     implementation project(':rhino')
-    implementation "org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.0"
+    implementation "org.jetbrains.kotlin:kotlin-metadata-jvm:2.3.10"
 
-    testImplementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.3.0"
+    testImplementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.3.10"
 }
 
 kotlin {
     jvmToolchain(11)
+}
+
+tasks.compileJava {
+    // Kotlin explicitly runs with an older Java version which does not work
+    // with the current ErrorProne.
+    options.errorprone.enabled = false;
+}
+tasks.compileTestJava {
+    options.errorprone.enabled = false;
 }
 
 publishing {

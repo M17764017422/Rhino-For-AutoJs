@@ -13,9 +13,11 @@ import java.text.Collator;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IllformedLocaleException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.mozilla.javascript.AbstractEcmaStringOperations.ReplacementOperation;
 import org.mozilla.javascript.ScriptRuntime.StringIdOrIndex;
 
 /**
@@ -664,14 +666,9 @@ final class NativeString extends ScriptableObject {
 
             // swap if end < start
             if (end < start) {
-                if (cx.getLanguageVersion() != Context.VERSION_1_2) {
-                    double temp = start;
-                    start = end;
-                    end = temp;
-                } else {
-                    // Emulate old JDK1.0 java.lang.String.substring()
-                    end = start;
-                }
+                double temp = start;
+                start = end;
+                end = temp;
             }
         }
         return target.subSequence((int) start, (int) end);
@@ -910,8 +907,14 @@ final class NativeString extends ScriptableObject {
         String string = ScriptRuntime.toString(o);
         String searchString = ScriptRuntime.toString(searchValue);
         boolean functionalReplace = replaceValue instanceof Callable;
+        List<ReplacementOperation> replaceOps;
+
         if (!functionalReplace) {
-            replaceValue = ScriptRuntime.toString(replaceValue);
+            replaceOps =
+                    AbstractEcmaStringOperations.buildReplacementList(
+                            ScriptRuntime.toString(replaceValue));
+        } else {
+            replaceOps = List.of();
         }
         int searchLength = searchString.length();
         int position = string.indexOf(searchString);
@@ -937,7 +940,7 @@ final class NativeString extends ScriptableObject {
                                     });
             replacement = ScriptRuntime.toString(replacementObj);
         } else {
-            NativeArray captures = (NativeArray) cx.newArray(scope, 0);
+            List<Object> captures = List.of();
             replacement =
                     AbstractEcmaStringOperations.getSubstitution(
                             cx,
@@ -947,7 +950,7 @@ final class NativeString extends ScriptableObject {
                             position,
                             captures,
                             Undefined.SCRIPTABLE_UNDEFINED,
-                            (String) replaceValue);
+                            replaceOps);
         }
         return preceding + replacement + following;
     }
@@ -992,8 +995,13 @@ final class NativeString extends ScriptableObject {
         String string = ScriptRuntime.toString(o);
         String searchString = ScriptRuntime.toString(searchValue);
         boolean functionalReplace = replaceValue instanceof Callable;
+        List<ReplacementOperation> replaceOps;
         if (!functionalReplace) {
-            replaceValue = ScriptRuntime.toString(replaceValue);
+            replaceOps =
+                    AbstractEcmaStringOperations.buildReplacementList(
+                            ScriptRuntime.toString(replaceValue));
+        } else {
+            replaceOps = List.of();
         }
         int searchLength = searchString.length();
         int advanceBy = Math.max(1, searchLength);
@@ -1029,7 +1037,7 @@ final class NativeString extends ScriptableObject {
                                         });
                 replacement = ScriptRuntime.toString(replacementObj);
             } else {
-                NativeArray captures = (NativeArray) cx.newArray(scope, 0);
+                List<Object> captures = List.of();
                 replacement =
                         AbstractEcmaStringOperations.getSubstitution(
                                 cx,
@@ -1039,7 +1047,7 @@ final class NativeString extends ScriptableObject {
                                 p,
                                 captures,
                                 Undefined.SCRIPTABLE_UNDEFINED,
-                                (String) replaceValue);
+                                replaceOps);
             }
             result.append(preserved);
             result.append(replacement);
@@ -1115,7 +1123,11 @@ final class NativeString extends ScriptableObject {
         Locale locale = cx.getLocale();
         if (args.length > 0 && cx.hasFeature(Context.FEATURE_INTL_402)) {
             String lang = ScriptRuntime.toString(args[0]);
-            locale = new Locale(lang);
+            try {
+                locale = new Locale.Builder().setLanguageTag(lang).build();
+            } catch (final IllformedLocaleException e) {
+                // ignore and fall back to the context locale
+            }
         }
         return thisStr.toLowerCase(locale);
     }
@@ -1128,7 +1140,11 @@ final class NativeString extends ScriptableObject {
         Locale locale = cx.getLocale();
         if (args.length > 0 && cx.hasFeature(Context.FEATURE_INTL_402)) {
             String lang = ScriptRuntime.toString(args[0]);
-            locale = new Locale(lang);
+            try {
+                locale = new Locale.Builder().setLanguageTag(lang).build();
+            } catch (final IllformedLocaleException e) {
+                // ignore and fall back to the context locale
+            }
         }
         return thisStr.toUpperCase(locale);
     }

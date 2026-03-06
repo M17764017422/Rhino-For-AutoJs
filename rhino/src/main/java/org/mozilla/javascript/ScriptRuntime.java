@@ -26,8 +26,8 @@ import java.util.stream.Stream;
 import org.mozilla.javascript.ast.FunctionNode;
 import org.mozilla.javascript.dtoa.DoubleFormatter;
 import org.mozilla.javascript.lc.type.TypeInfo;
-import org.mozilla.javascript.lc.type.TypeInfoFactory;
-import org.mozilla.javascript.lc.type.impl.factory.ConcurrentFactory;
+import org.mozilla.javascript.lc.type.impl.factory.ClassValueCacheFactory;
+import org.mozilla.javascript.lc.type.impl.factory.LegacyCacheFactory;
 import org.mozilla.javascript.typedarrays.NativeArrayBuffer;
 import org.mozilla.javascript.typedarrays.NativeBigInt64Array;
 import org.mozilla.javascript.typedarrays.NativeBigUint64Array;
@@ -76,7 +76,7 @@ public class ScriptRuntime {
         return cx.typeErrorThrower;
     }
 
-    private static final class ThrowTypeError extends BaseFunction {
+    static final class ThrowTypeError extends BaseFunction {
         private static final long serialVersionUID = -5891740962154902286L;
 
         ThrowTypeError(Scriptable scope) {
@@ -103,6 +103,11 @@ public class ScriptRuntime {
 
         @Override
         public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+            throwNotAllowed();
+            return null;
+        }
+
+        public static void throwNotAllowed() {
             throw typeErrorById("msg.op.not.allowed");
         }
     }
@@ -192,12 +197,18 @@ public class ScriptRuntime {
             ((TopLevel) scope).clearCache();
         }
 
+        scope.put("global", scope, scope);
+
         scope.associateValue(LIBRARY_SCOPE_KEY, scope);
         new ClassCache().associate(scope);
-        new ConcurrentFactory().associate(scope);
+        var typeFactory =
+                (androidApi >= 34 || androidApi < 0)
+                        ? new ClassValueCacheFactory.Concurrent()
+                        : new LegacyCacheFactory.Concurrent();
+        typeFactory.associate(scope);
 
         LambdaConstructor function = BaseFunction.init(cx, scope, sealed);
-        LambdaConstructor obj = NativeObject.init(cx, scope, sealed);
+        JSFunction obj = NativeObject.init(cx, scope, sealed);
 
         ScriptableObject objectPrototype = (ScriptableObject) obj.getPrototypeProperty();
         ScriptableObject functionPrototype = (ScriptableObject) function.getPrototypeProperty();
@@ -211,7 +222,7 @@ public class ScriptRuntime {
         if (scope.getPrototype() == null) scope.setPrototype(objectPrototype);
 
         // must precede NativeGlobal since it's needed therein
-        NativeError.init(scope, sealed);
+        NativeError.init(cx, scope, sealed);
         NativeGlobal.init(cx, scope, sealed);
 
         NativeArray.init(cx, scope, sealed);
@@ -222,9 +233,9 @@ public class ScriptRuntime {
             NativeArray.setMaximumInitialCapacity(200000);
         }
         NativeString.init(scope, sealed);
-        NativeBoolean.init(scope, sealed);
+        NativeBoolean.init(cx, scope, sealed);
         NativeNumber.init(scope, sealed);
-        NativeDate.init(scope, sealed);
+        NativeDate.init(cx, scope, sealed);
         new LazilyLoadedCtor(scope, "Math", sealed, true, NativeMath::init);
         new LazilyLoadedCtor(scope, "JSON", sealed, true, NativeJSON::init);
 
@@ -905,6 +916,106 @@ public class ScriptRuntime {
         return result;
     }
 
+    /**
+     * Helper for object rest properties in destructuring. Creates a shallow copy of the source
+     * object excluding the specified keys.
+     *
+     * @param cx the current Context
+     * @param scope the current scope
+     * @param source the source object
+     * @param excludeKeys array of property names to exclude
+     * @return a new object with all properties except the excluded ones
+     */
+    public static Scriptable doObjectRest(
+            Context cx, Scriptable scope, Object source, Object[] excludeKeys) {
+        Scriptable sourceObj = toObject(cx, scope, source);
+        Scriptable result = cx.newObject(scope);
+
+        java.util.Set<String> excludeStrings = new java.util.HashSet<>();
+        java.util.Set<Integer> excludeIntegers = new java.util.HashSet<>();
+        java.util.Set<Symbol> excludeSymbols = new java.util.HashSet<>();
+
+        for (Object key : excludeKeys) {
+            if (key == null) {
+                continue;
+            }
+            if (key instanceof Symbol) {
+                excludeSymbols.add((Symbol) key);
+            } else if (key instanceof Integer) {
+                excludeIntegers.add((Integer) key);
+            } else {
+                excludeStrings.add(toString(key));
+            }
+        }
+
+        if (sourceObj instanceof ScriptableObject) {
+            ScriptableObject so = (ScriptableObject) sourceObj;
+            try (var map = so.startCompoundOp(false)) {
+                // Get all enumerable properties (regular + symbols) in one call
+                Object[] allIds = so.getIds(map, false, true);
+
+                for (Object id : allIds) {
+                    // Check exclusion and copy property
+                    if (!shouldExcludeProperty(
+                            id, excludeStrings, excludeIntegers, excludeSymbols)) {
+                        copyProperty(sourceObj, result, id, cx, scope);
+                    }
+                }
+            }
+        } else {
+            Object[] ids = sourceObj.getIds();
+            for (Object id : ids) {
+                if (!shouldExcludeProperty(id, excludeStrings, excludeIntegers, excludeSymbols)) {
+                    copyProperty(sourceObj, result, id, cx, scope);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /** Check if a property should be excluded based on its ID */
+    private static boolean shouldExcludeProperty(
+            Object id,
+            java.util.Set<String> excludeStrings,
+            java.util.Set<Integer> excludeIntegers,
+            java.util.Set<Symbol> excludeSymbols) {
+        if (id instanceof String) {
+            return excludeStrings.contains((String) id);
+        } else if (id instanceof Integer) {
+            return excludeIntegers.contains((Integer) id) || excludeStrings.contains(id.toString());
+        } else if (id instanceof Symbol) {
+            return excludeSymbols.contains((Symbol) id);
+        }
+        return false;
+    }
+
+    /** Copy a single property from source to result */
+    private static void copyProperty(
+            Scriptable source, Scriptable result, Object id, Context cx, Scriptable scope) {
+        Object value;
+
+        if (id instanceof Integer) {
+            int index = (Integer) id;
+            value = getObjectIndex(source, index, cx);
+            if (value != Scriptable.NOT_FOUND) {
+                result.put(index, result, value);
+            }
+        } else if (id instanceof String) {
+            String propName = (String) id;
+            value = getObjectProp(source, propName, cx, scope);
+            if (value != Scriptable.NOT_FOUND) {
+                result.put(propName, result, value);
+            }
+        } else if (id instanceof Symbol && source instanceof ScriptableObject) {
+            Symbol sym = (Symbol) id;
+            value = ((ScriptableObject) source).get(sym, source);
+            if (value != Scriptable.NOT_FOUND && result instanceof ScriptableObject) {
+                ((ScriptableObject) result).put(sym, result, value);
+            }
+        }
+    }
+
     public static String escapeString(String s) {
         return escapeString(s, '"');
     }
@@ -1141,7 +1252,7 @@ public class ScriptRuntime {
     }
 
     static String defaultObjectToSource(
-            Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+            Context cx, JSFunction f, Object nt, Scriptable s, Object thisObj, Object[] args) {
         boolean toplevel, iterating;
         if (cx.iterating == null) {
             toplevel = true;
@@ -1163,19 +1274,20 @@ public class ScriptRuntime {
         try {
             if (!iterating) {
                 cx.iterating.add(thisObj); // stop recursion.
-                Object[] ids = thisObj.getIds();
+                Scriptable so = ScriptRuntime.toObject(s, thisObj);
+                Object[] ids = so.getIds();
                 for (int i = 0; i < ids.length; i++) {
                     Object id = ids[i];
                     Object value;
                     if (id instanceof Integer) {
                         int intId = ((Integer) id).intValue();
-                        value = thisObj.get(intId, thisObj);
+                        value = so.get(intId, so);
                         if (value == Scriptable.NOT_FOUND) continue; // a property has been removed
                         if (i > 0) result.append(", ");
                         result.append(intId);
                     } else {
                         String strId = (String) id;
-                        value = thisObj.get(strId, thisObj);
+                        value = so.get(strId, so);
                         if (value == Scriptable.NOT_FOUND) continue; // a property has been removed
                         if (i > 0) result.append(", ");
                         if (ScriptRuntime.isValidIdentifierName(strId, cx, cx.isStrictMode())) {
@@ -1187,7 +1299,7 @@ public class ScriptRuntime {
                         }
                     }
                     result.append(':');
-                    result.append(ScriptRuntime.uneval(cx, scope, value));
+                    result.append(ScriptRuntime.uneval(cx, s, value));
                 }
             }
         } finally {
@@ -5368,6 +5480,12 @@ public class ScriptRuntime {
         object.setPrototype(TopLevel.getBuiltinPrototype(scope, type));
     }
 
+    public static void setBuiltinProtoAndParent(
+            ScriptableObject obj, JSFunction f, Object nt, Scriptable s, TopLevel.Builtins type) {
+        obj.setPrototype((Scriptable) f.getPrototypeProperty());
+        obj.setParentScope(s);
+    }
+
     public static void initFunction(
             Context cx, Scriptable scope, JSFunction function, int type, boolean fromEvalCode) {
         if (type == FunctionNode.FUNCTION_STATEMENT) {
@@ -5573,12 +5691,9 @@ public class ScriptRuntime {
     }
 
     static void checkDeprecated(Context cx, String name) {
-        int version = cx.getLanguageVersion();
-        if (version >= Context.VERSION_1_4 || version == Context.VERSION_DEFAULT) {
-            String msg = getMessageById("msg.deprec.ctor", name);
-            if (version == Context.VERSION_DEFAULT) Context.reportWarning(msg);
-            else throw Context.reportRuntimeError(msg);
-        }
+        String msg = getMessageById("msg.deprec.ctor", name);
+        if (cx.getLanguageVersion() == Context.VERSION_DEFAULT) Context.reportWarning(msg);
+        else throw Context.reportRuntimeError(msg);
     }
 
     /**

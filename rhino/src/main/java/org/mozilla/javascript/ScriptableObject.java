@@ -37,7 +37,6 @@ import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
 import org.mozilla.javascript.annotations.JSStaticFunction;
 import org.mozilla.javascript.debug.DebuggableObject;
-import org.mozilla.javascript.lc.type.TypeInfoFactory;
 
 /**
  * This is the default implementation of the Scriptable interface. This class provides convenient
@@ -858,15 +857,14 @@ public abstract class ScriptableObject extends SlotMapOwner
     @Override
     public boolean hasInstance(Scriptable instance) {
         // Default for JS objects (other than Function) is to do prototype
-        // chasing. This will be overridden in NativeFunction and non-JS
-        // objects.
+        // chasing. Overridden in BaseFunction, E4X, and Java interop classes.
 
         Context cx = Context.getCurrentContext();
         Object hasInstance = ScriptRuntime.getObjectElem(this, SymbolKey.HAS_INSTANCE, cx);
         if (hasInstance instanceof Function) {
             var scope = ((Function) hasInstance).getDeclarationScope();
             return ScriptRuntime.toBoolean(
-                    ((Function) hasInstance).call(cx, scope, this, new Object[] {this}));
+                    ((Function) hasInstance).call(cx, scope, this, new Object[] {instance}));
         }
         if (!(this instanceof Callable)) {
             throw ScriptRuntime.typeErrorById("msg.instanceof.bad.target");
@@ -1384,6 +1382,16 @@ public abstract class ScriptableObject extends SlotMapOwner
         so.defineProperty(propertyName, value, attributes);
     }
 
+    public static void defineProperty(
+            Scriptable destination, SymbolKey propertyName, Object value, int attributes) {
+        if (!(destination instanceof ScriptableObject)) {
+            ((SymbolScriptable) destination).put(propertyName, destination, value);
+            return;
+        }
+        ScriptableObject so = (ScriptableObject) destination;
+        so.defineProperty(propertyName, value, attributes);
+    }
+
     /**
      * Utility method to add lambda properties to arbitrary Scriptable object.
      *
@@ -1529,11 +1537,9 @@ public abstract class ScriptableObject extends SlotMapOwner
      */
     public void defineProperty(
             String propertyName, Object delegateTo, Method getter, Method setter, int attributes) {
-        var typeFactory = TypeInfoFactory.getOrElse(this, TypeInfoFactory.GLOBAL);
-
         MemberBox getterBox = null;
         if (getter != null) {
-            getterBox = new MemberBox(getter, typeFactory);
+            getterBox = new MemberBox(getter);
 
             boolean delegatedForm;
             if (!Modifier.isStatic(getter.getModifiers())) {
@@ -1574,7 +1580,7 @@ public abstract class ScriptableObject extends SlotMapOwner
             if (setter.getReturnType() != Void.TYPE)
                 throw Context.reportRuntimeErrorById("msg.setter.return", setter.toString());
 
-            setterBox = new MemberBox(setter, typeFactory);
+            setterBox = new MemberBox(setter);
 
             boolean delegatedForm;
             if (!Modifier.isStatic(setter.getModifiers())) {

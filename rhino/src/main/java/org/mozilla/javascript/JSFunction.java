@@ -28,6 +28,23 @@ public class JSFunction extends BaseFunction implements ScriptOrFn<JSFunction> {
         }
     }
 
+    JSFunction(
+            Scriptable scope,
+            JSDescriptor<JSFunction> descriptor,
+            Scriptable lexicalThis,
+            Scriptable homeObject) {
+        this.descriptor = descriptor;
+        this.lexicalThis = lexicalThis;
+        this.homeObject = homeObject;
+        setParentScope(scope);
+        setPrototype(ScriptableObject.getFunctionPrototype(scope));
+    }
+
+    @Override
+    protected void setPrototypeProperty(Object prototype) {
+        super.setPrototypeProperty(prototype);
+    }
+
     @Override
     public Scriptable getDeclarationScope() {
         return this.getParentScope();
@@ -76,16 +93,7 @@ public class JSFunction extends BaseFunction implements ScriptOrFn<JSFunction> {
 
     @Override
     public int getLength() {
-        int arity = descriptor.getArity();
-        if (getLanguageVersion() != Context.VERSION_1_2) {
-            return arity;
-        }
-        Context cx = Context.getContext();
-        NativeCall activation = ScriptRuntime.findFunctionActivation(cx, this);
-        if (activation == null) {
-            return arity;
-        }
-        return activation.originalArgs.length;
+        return descriptor.getArity();
     }
 
     protected int getParamAndVarCount() {
@@ -222,5 +230,10 @@ public class JSFunction extends BaseFunction implements ScriptOrFn<JSFunction> {
         JSDescriptor<JSFunction> desc = parent.getFunction(index);
         JSFunction f = new JSFunction(cx, scope, desc, null, homeObject);
         return f;
+    }
+
+    @Override
+    public boolean isConstructor() {
+        return descriptor.getConstructor() != null;
     }
 }
