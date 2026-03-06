@@ -1,0 +1,119 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  GRADLE_OPTS: "--enable-native-access=ALL-UNNAMED"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      short_sha: ${{ steps.version.outputs.short_sha }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      
+    - name: Get version info
+      id: version
+      run: |
+        VERSION=$(grep "^version=" gradle.properties | cut -d'=' -f2)
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+        
+    - name: Build rhino-all
+      run: ./gradlew :rhino-all:shadowJar --no-configuration-cache
+      
+    - name: List built JARs
+      run: ls -la rhino-all/build/libs/
+      
+    - name: Upload rhino-all JAR artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: rhino-all
+        path: rhino-all/build/libs/rhino-all-*.jar
+        retention-days: 30
+
+  publish-github-packages:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      
+    - name: Publish to GitHub Packages
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./gradlew :rhino-all:publish --no-configuration-cache
+
+  create-release:
+    needs: [build, publish-github-packages]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: rhino-all
+        path: ./artifacts
+        
+    - name: List artifacts
+      run: ls -la ./artifacts/
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ needs.build.outputs.version }}-${{ needs.build.outputs.short_sha }}
+        name: Rhino for AutoJs6 ${{ needs.build.outputs.version }} (${{ needs.build.outputs.short_sha }})
+        body: |
+          ## Rhino for AutoJs6 ${{ needs.build.outputs.version }}
+          
+          基于 mozilla/rhino，保留 AutoJs6 兼容性定制修改。
+          
+          ### 保留的定制修改
+          - VMBridge: Android 7.x 兼容性（无 VarHandle）
+          - IRFactory: StackOverflowError 修复
+          - MemberBox: 公共访问器和 VMBridge 调用
+          - SlotMapOwner: synchronized 替代 VarHandle
+          - NativeJavaObject: legacyStaticType 构造函数
+          - ScriptableObject: toScriptableObject 方法
+          - ImporterTopLevel: String 参数支持
+          
+          ### 使用方法
+          下载 JAR 文件用于 AutoJs6 项目。
+        files: ./artifacts/*.jar
+        draft: false
+        prerelease: false
