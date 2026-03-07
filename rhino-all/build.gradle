@@ -35,6 +35,8 @@ shadowJar {
     exclude 'META-INF/services/org/jline/terminal/provider/ffm'
     // Exclude JLine service directory entries (empty directories cause D8 NullPointerException)
     exclude 'META-INF/services/org/jline/**'
+    // Exclude empty META-INF/services/ directory after removing JLine services
+    exclude 'META-INF/services/'
 }
 
 publishing {
