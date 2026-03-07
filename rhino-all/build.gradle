@@ -26,6 +26,9 @@ shadowJar {
     manifest {
         attributes 'Main-Class': 'org.mozilla.javascript.tools.shell.Main'
     }
+    // Exclude JLine FFM classes (Java 22 bytecode) for Android compatibility
+    // FFM (Foreign Function & Memory) API requires Java 22+
+    exclude 'org/jline/terminal/impl/ffm/**'
 }
 
 publishing {
