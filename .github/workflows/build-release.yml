@@ -11,9 +11,6 @@ permissions:
   contents: write
   packages: write
 
-env:
-  GRADLE_OPTS: "--enable-native-access=ALL-UNNAMED"
-
 jobs:
   build:
     runs-on: ubuntu-latest
