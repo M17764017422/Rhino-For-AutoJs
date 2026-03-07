@@ -368,9 +368,9 @@ public class FunctionObject extends BaseFunction {
 
             if (parmsLength == VARARGS_METHOD) {
                 if (thisObj != null) {
-                    result = member.invoke(null, new Object[]{cx, thisObj, args, this});
+                    result = member.invoke(null, new Object[] {cx, thisObj, args, this});
                 } else {
-                    result = member.invoke(null, new Object[]{cx, this, args, this});
+                    result = member.invoke(null, new Object[] {cx, this, args, this});
                 }
                 checkMethodResult = true;
             } else {
