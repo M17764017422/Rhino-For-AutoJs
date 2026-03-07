@@ -1,5 +1,9 @@
 pluginManagement {
     repositories {
+        // 阿里云镜像加速（国内优先）
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         gradlePluginPortal()
         google()
         mavenCentral()
@@ -13,6 +17,9 @@ plugins {
 
 dependencyResolutionManagement {
     repositories {
+        // 阿里云镜像加速（国内优先）
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         google()
         mavenCentral()
         gradlePluginPortal()
