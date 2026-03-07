@@ -33,12 +33,8 @@ shadowJar {
     exclude 'META-INF/native-image/org.jline/jline-terminal-ffm/**'
     exclude 'META-INF/services/org.jline.terminal.provider.ffm'
     exclude 'META-INF/services/org/jline/terminal/provider/ffm'
-    // Exclude empty directory entries that cause D8 NullPointerException
-    exclude 'META-INF/services/'
-    exclude 'META-INF/services/org/'
-    exclude 'META-INF/services/org/jline/'
-    exclude 'META-INF/services/org/jline/terminal/'
-    exclude 'META-INF/services/org/jline/terminal/provider/'
+    // Exclude JLine service directory entries (empty directories cause D8 NullPointerException)
+    exclude 'META-INF/services/org/jline/**'
 }
 
 publishing {
