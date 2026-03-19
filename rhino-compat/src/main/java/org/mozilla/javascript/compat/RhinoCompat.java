@@ -14,14 +14,15 @@ import org.mozilla.javascript.*;
  *
  * <p>提供统一的兼容 API，屏蔽 Rhino 1.x 与 2.x 版本差异。
  *
- * <h2>主要功能</h2>
+ * <h2>一行代码迁移</h2>
  *
- * <ul>
- *   <li>E4X/XML 自动兼容初始化
- *   <li>函数类型统一检查
- *   <li>函数安全调用
- *   <li>类型转换适配
- * </ul>
+ * <pre>
+ * // 初始化后，旧代码无需修改
+ * RhinoCompat.init(cx, scope);
+ *
+ * // Java.extend 等旧 API 自动可用
+ * var listener = Java.extend(OnClickListener, { ... });
+ * </pre>
  *
  * @since 2.0.0
  */
@@ -35,9 +36,15 @@ public final class RhinoCompat {
     private static final Object INIT_LOCK = new Object();
 
     /**
-     * 初始化 Rhino 环境（包含 E4X 支持）
+     * 初始化兼容层（包含 E4X 和 Java.extend）
      *
-     * <p>兼容 Rhino 1.x 的初始化方式，自动处理 E4X XMLLib 注册
+     * <p>调用此方法后，旧版 Rhino 1.x API 自动可用：
+     *
+     * <ul>
+     *   <li>Java.extend(Interface, {...})
+     *   <li>extend(Interface, {...})
+     *   <li>E4X XML 支持
+     * </ul>
      *
      * @param cx 当前 Context
      * @param scope 作用域
@@ -47,7 +54,7 @@ public final class RhinoCompat {
     }
 
     /**
-     * 初始化 Rhino 环境（包含 E4X 支持）
+     * 初始化兼容层（包含 E4X 和 Java.extend）
      *
      * @param cx 当前 Context
      * @param scope 作用域
@@ -62,16 +69,108 @@ public final class RhinoCompat {
                 return;
             }
 
-            // 初始化标准对象
-            // Rhino 2.0.0+: initStandardObjects 是 Context 的方法
+            // 1. 初始化标准对象
             if (scope instanceof ScriptableObject) {
                 cx.initStandardObjects((ScriptableObject) scope, sealed);
             }
 
-            // 初始化 E4X 支持
+            // 2. 注入 Java.extend
+            injectJavaExtend(cx, scope);
+
+            // 3. 初始化 E4X 支持
             E4XCompat.init(cx, scope, sealed);
 
             initialized = true;
+        }
+    }
+
+    /**
+     * 便捷初始化（自动获取 Context）
+     *
+     * @param scope 作用域
+     */
+    public static void init(Scriptable scope) {
+        Context cx = Context.getCurrentContext();
+        if (cx == null) {
+            cx = Context.enter();
+            try {
+                init(cx, scope);
+            } finally {
+                Context.exit();
+            }
+        } else {
+            init(cx, scope);
+        }
+    }
+
+    /**
+     * 检查是否已初始化
+     */
+    public static boolean isInitialized() {
+        return initialized;
+    }
+
+    /**
+     * 重置状态（仅用于测试）
+     */
+    public static void reset() {
+        initialized = false;
+    }
+
+    // ========== Java.extend 注入 ==========
+
+    private static void injectJavaExtend(Context cx, Scriptable scope) {
+        var extendFunc = new LambdaFunction(
+                scope,
+                "extend",
+                2,
+                (SerializableCallable) (context, s, thisObj, args) -> {
+                    if (args.length < 2) {
+                        throw ScriptRuntime.typeErrorById("msg.function.arg1", "Java.extend");
+                    }
+
+                    // 解析参数：Class(es) + implementation
+                    var classCount = 0;
+                    for (int i = 0; i < args.length - 1; i++) {
+                        if (args[i] instanceof NativeJavaClass || args[i] instanceof Class) {
+                            classCount++;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // 收集类
+                    Class<?>[] classes = new Class<?>[classCount];
+                    for (int i = 0; i < classCount; i++) {
+                        if (args[i] instanceof NativeJavaClass) {
+                            classes[i] = ((NativeJavaClass) args[i]).getClassObject();
+                        } else if (args[i] instanceof Class) {
+                            classes[i] = (Class<?>) args[i];
+                        }
+                    }
+
+                    // 实现对象
+                    Scriptable impl = ScriptableObject.ensureScriptable(args[classCount]);
+
+                    // 调用 JavaExtendCompat
+                    if (classCount == 1) {
+                        return JavaExtendCompat.extend(context, s, classes[0], impl);
+                    } else {
+                        return JavaExtendCompat.extend(context, s, classes, impl);
+                    }
+                });
+
+        // 注入全局函数: extend(...)
+        ScriptableObject.defineProperty(scope, "extend", extendFunc, ScriptableObject.DONTENUM);
+
+        // 注入 Java.extend: Java.extend(...)
+        var Java = ScriptableObject.getProperty(scope, "Java");
+        if (Java == Scriptable.NOT_FOUND) {
+            var javaObj = cx.newObject(scope);
+            ScriptableObject.defineProperty(javaObj, "extend", extendFunc, ScriptableObject.DONTENUM);
+            ScriptableObject.defineProperty(scope, "Java", javaObj, ScriptableObject.DONTENUM);
+        } else if (Java instanceof Scriptable) {
+            ScriptableObject.defineProperty((Scriptable) Java, "extend", extendFunc, ScriptableObject.DONTENUM);
         }
     }
 
@@ -79,11 +178,6 @@ public final class RhinoCompat {
 
     /**
      * 检查对象是否为 JavaScript 函数
-     *
-     * <p>兼容所有版本的函数类型：NativeFunction、JSFunction、BoundFunction、LambdaFunction
-     *
-     * @param obj 要检查的对象
-     * @return 如果是 JavaScript 函数返回 true
      */
     public static boolean isFunction(Object obj) {
         return obj instanceof BaseFunction;
@@ -91,11 +185,6 @@ public final class RhinoCompat {
 
     /**
      * 检查对象是否可调用
-     *
-     * <p>基于 Callable 接口，是最稳定的判断方式
-     *
-     * @param obj 要检查的对象
-     * @return 如果可调用返回 true
      */
     public static boolean isCallable(Object obj) {
         return obj instanceof Callable;
@@ -103,9 +192,6 @@ public final class RhinoCompat {
 
     /**
      * 检查是否为箭头函数
-     *
-     * @param obj 要检查的对象
-     * @return 如果是箭头函数返回 true
      */
     public static boolean isArrowFunction(Object obj) {
         return FunctionCompat.isArrowFunction(obj);
@@ -113,16 +199,11 @@ public final class RhinoCompat {
 
     /**
      * 检查是否为生成器函数
-     *
-     * @param obj 要检查的对象
-     * @return 如果是生成器函数返回 true
      */
     public static boolean isGeneratorFunction(Object obj) {
-        // Rhino 2.0.0+: JSFunction 通过 JSDescriptor 检测生成器
         if (obj instanceof JSFunction) {
             return ((JSFunction) obj).getDescriptor().isES6Generator();
         }
-        // NativeFunction 的 isGeneratorFunction() 是 protected，需要子类实现
         if (obj instanceof NativeFunctionAdapter) {
             return ((NativeFunctionAdapter) obj).isGeneratorFunctionAdapter();
         }
@@ -131,9 +212,6 @@ public final class RhinoCompat {
 
     /**
      * 检查是否为绑定函数
-     *
-     * @param obj 要检查的对象
-     * @return 如果是绑定函数返回 true
      */
     public static boolean isBoundFunction(Object obj) {
         return obj instanceof BoundFunction;
@@ -143,16 +221,6 @@ public final class RhinoCompat {
 
     /**
      * 安全调用函数
-     *
-     * <p>自动处理 Callable 和非 Callable 对象
-     *
-     * @param fn 函数对象
-     * @param cx 当前 Context
-     * @param scope 作用域
-     * @param thisObj this 对象
-     * @param args 参数数组
-     * @return 调用结果
-     * @throws RuntimeException 如果对象不可调用
      */
     public static Object call(
             Object fn, Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
@@ -164,12 +232,6 @@ public final class RhinoCompat {
 
     /**
      * 构造对象
-     *
-     * @param fn 构造函数
-     * @param cx 当前 Context
-     * @param scope 作用域
-     * @param args 参数数组
-     * @return 构造的对象
      */
     public static Scriptable construct(Object fn, Context cx, Scriptable scope, Object[] args) {
         if (fn instanceof Function) {
@@ -182,9 +244,6 @@ public final class RhinoCompat {
 
     /**
      * 获取函数参数个数
-     *
-     * @param fn 函数对象
-     * @return 参数个数
      */
     public static int getParamCount(Object fn) {
         return FunctionCompat.getParamCount(fn);
@@ -192,9 +251,6 @@ public final class RhinoCompat {
 
     /**
      * 获取函数名
-     *
-     * @param fn 函数对象
-     * @return 函数名
      */
     public static String getFunctionName(Object fn) {
         return FunctionCompat.getFunctionName(fn);
@@ -204,11 +260,6 @@ public final class RhinoCompat {
 
     /**
      * 包装函数为兼容类型
-     *
-     * <p>将 JSFunction 包装为 NativeFunction 适配器
-     *
-     * @param fn 函数对象
-     * @return 包装后的对象
      */
     public static Object wrapFunction(Object fn) {
         return NativeFunctionAdapter.wrap(fn);
@@ -216,9 +267,6 @@ public final class RhinoCompat {
 
     /**
      * 解包函数对象
-     *
-     * @param fn 可能被包装的函数对象
-     * @return 原始函数对象
      */
     public static Object unwrapFunction(Object fn) {
         return NativeFunctionAdapter.unwrap(fn);
