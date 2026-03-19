@@ -60,12 +60,17 @@ jobs:
           fi
 
   # Test various combinations of building and testing
+  # 支持 JDK 17-25，确保 spotless 兼容性
   matrix-test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
+          - java-version: "17"
+            test-java-version: "17"
+            name: "Java 17 Build and Test"
+            multithread: false
           - java-version: "21"
             test-java-version: "21"
             name: "Java 21 Build and Test"
