@@ -473,7 +473,7 @@ public class ClassFileWriter {
                 // generated and Sun's verifier is expecting type state to be
                 // placed even at dead blocks of code.
                 addSuperBlockStart(itsCodeBufferTop + 3);
-            // fall through...
+                // fall through...
             case ByteCode.IFEQ:
             case ByteCode.IFNE:
             case ByteCode.IFLT:
@@ -1907,7 +1907,7 @@ public class ClassFileWriter {
                 case ByteCode.CASTORE:
                 case ByteCode.SASTORE:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.PUTFIELD: // pop; pop
                 case ByteCode.IF_ICMPEQ:
                 case ByteCode.IF_ICMPNE:
@@ -1918,7 +1918,7 @@ public class ClassFileWriter {
                 case ByteCode.IF_ACMPEQ:
                 case ByteCode.IF_ACMPNE:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.IFEQ: // pop
                 case ByteCode.IFNE:
                 case ByteCode.IFLT:
@@ -1960,7 +1960,7 @@ public class ClassFileWriter {
                 case ByteCode.DCMPL:
                 case ByteCode.DCMPG:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.INEG: // pop; push(INTEGER)
                 case ByteCode.L2I:
                 case ByteCode.F2I:
@@ -1971,7 +1971,7 @@ public class ClassFileWriter {
                 case ByteCode.ARRAYLENGTH:
                 case ByteCode.INSTANCEOF:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.ICONST_M1: // push(INTEGER)
                 case ByteCode.ICONST_0:
                 case ByteCode.ICONST_1:
@@ -2001,13 +2001,13 @@ public class ClassFileWriter {
                 case ByteCode.LOR:
                 case ByteCode.LXOR:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.LNEG: // pop; push(LONG)
                 case ByteCode.I2L:
                 case ByteCode.F2L:
                 case ByteCode.D2L:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.LCONST_0: // push(LONG)
                 case ByteCode.LCONST_1:
                 case ByteCode.LLOAD:
@@ -2024,13 +2024,13 @@ public class ClassFileWriter {
                 case ByteCode.FDIV:
                 case ByteCode.FREM:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.FNEG: // pop; push(FLOAT)
                 case ByteCode.I2F:
                 case ByteCode.L2F:
                 case ByteCode.D2F:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.FCONST_0: // push(FLOAT)
                 case ByteCode.FCONST_1:
                 case ByteCode.FCONST_2:
@@ -2048,13 +2048,13 @@ public class ClassFileWriter {
                 case ByteCode.DDIV:
                 case ByteCode.DREM:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.DNEG: // pop; push(DOUBLE)
                 case ByteCode.I2D:
                 case ByteCode.L2D:
                 case ByteCode.F2D:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.DCONST_0: // push(DOUBLE)
                 case ByteCode.DCONST_1:
                 case ByteCode.DLOAD:
@@ -2234,7 +2234,7 @@ public class ClassFileWriter {
                     break;
                 case ByteCode.GETFIELD:
                     pop();
-                // fall through
+                    // fall through
                 case ByteCode.GETSTATIC:
                     index = getOperand(bci + 1, 2);
                     FieldOrMethodRef f = (FieldOrMethodRef) itsConstantPool.getConstantData(index);
@@ -2305,7 +2305,7 @@ public class ClassFileWriter {
                     break;
                 case ByteCode.MULTIANEWARRAY:
                 case ByteCode.LOOKUPSWITCH:
-                // Currently not used in any part of Rhino, so ignore it
+                    // Currently not used in any part of Rhino, so ignore it
                 case ByteCode.JSR: // TODO: JSR is deprecated
                 case ByteCode.RET:
                 case ByteCode.JSR_W:
@@ -2901,7 +2901,7 @@ public class ClassFileWriter {
                     case 'J':
                     case 'D':
                         --stackDiff;
-                    // fall through
+                        // fall through
                     case 'B':
                     case 'S':
                     case 'C':
@@ -2938,7 +2938,7 @@ public class ClassFileWriter {
                             case 'L':
                                 // fall through
                         }
-                    // fall through
+                        // fall through
                     case 'L':
                         {
                             --stackDiff;
@@ -2962,7 +2962,7 @@ public class ClassFileWriter {
                     case 'J':
                     case 'D':
                         ++stackDiff;
-                    // fall through
+                        // fall through
                     case 'B':
                     case 'S':
                     case 'C':
@@ -2972,7 +2972,7 @@ public class ClassFileWriter {
                     case 'L':
                     case '[':
                         ++stackDiff;
-                    // fall through
+                        // fall through
                     case 'V':
                         break;
                 }

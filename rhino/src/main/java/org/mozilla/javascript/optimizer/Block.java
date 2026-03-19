@@ -528,7 +528,7 @@ class Block {
             case Token.TEMPLATE_LITERAL:
             case Token.BIGINT:
                 return Optimizer.AnyType; // XXX: actually, we know it's not
-            // number, but no type yet for that
+                // number, but no type yet for that
 
             case Token.ADD:
                 {

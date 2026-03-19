@@ -314,7 +314,7 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
             case Token.EMPTY:
             case Token.WITH:
                 updateLineNumber(node);
-            // fall through
+                // fall through
             case Token.SCRIPT:
                 while (child != null) {
                     visitStatement(child, initialStackDepth);
@@ -1851,7 +1851,7 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
                     addUint8(varIndex);
                     return;
                 }
-            // fallthrough
+                // fallthrough
             case Icode_VAR_INC_DEC:
                 addIndexOp(op, varIndex);
                 return;

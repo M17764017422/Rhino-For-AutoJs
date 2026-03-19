@@ -336,9 +336,26 @@ public class ScriptRuntime {
 
     static String[] getTopPackageNames() {
         // Include "android" top package if running on Android
-        String[] names = {"java", "javax", "org", "com", "edu", "net", "jp", "de", "okhttp3", "androidx", "kotlin", "ezy", "okio", "io", "eu"};
+        String[] names = {
+            "java",
+            "javax",
+            "org",
+            "com",
+            "edu",
+            "net",
+            "jp",
+            "de",
+            "okhttp3",
+            "androidx",
+            "kotlin",
+            "ezy",
+            "okio",
+            "io",
+            "eu"
+        };
         return androidApi > 0
-                ? Stream.concat(Arrays.stream(names), Arrays.stream(new String[]{"android"})).toArray(String[]::new)
+                ? Stream.concat(Arrays.stream(names), Arrays.stream(new String[] {"android"}))
+                        .toArray(String[]::new)
                 : names;
     }
 
@@ -599,7 +616,7 @@ public class ScriptRuntime {
                             if (bit) {
                                 state = MIXED_AFTER_54;
                             }
-                        // fallthrough
+                            // fallthrough
                         case MIXED_AFTER_54:
                             factor *= 2;
                             break;
@@ -5927,7 +5944,11 @@ public class ScriptRuntime {
         if (value == Scriptable.NOT_FOUND) {
             return typeErrorById("msg.function.not.found.in", propertyName, objString);
         }
-        return typeErrorById("msg.isnt.function.in", propertyName, objString, value == null ? "null" : typeof(value));
+        return typeErrorById(
+                "msg.isnt.function.in",
+                propertyName,
+                objString,
+                value == null ? "null" : typeof(value));
     }
 
     private static RuntimeException notXmlError(Object value) {

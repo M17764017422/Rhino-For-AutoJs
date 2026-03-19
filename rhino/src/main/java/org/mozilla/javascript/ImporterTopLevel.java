@@ -8,8 +8,8 @@
 
 package org.mozilla.javascript;
 
-import java.util.ArrayList;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 
 /**
  * Class ImporterTopLevel
@@ -263,7 +263,12 @@ public class ImporterTopLevel extends TopLevel {
             try {
                 throw Context.reportRuntimeErrorById("msg.prop.defined", n);
             } catch (EvaluatorException e) {
-                System.out.println("Exception [ " + e.getMessage() + " ] from " + ImporterTopLevel.class.getSimpleName() + " has been suppressed");
+                System.out.println(
+                        "Exception [ "
+                                + e.getMessage()
+                                + " ] from "
+                                + ImporterTopLevel.class.getSimpleName()
+                                + " has been suppressed");
             }
         }
         // defineProperty(n, cl, DONTENUM);

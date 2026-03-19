@@ -1577,7 +1577,7 @@ public class NativeRegExp extends ScriptableObject {
                     throw Kit.codeBug("parseLegacyOctalEscapeSequence failed");
                 }
                 break;
-            /* Control escape */
+                /* Control escape */
             case 'f':
                 c = 0xC;
                 doFlat(state, c);
@@ -1598,7 +1598,7 @@ public class NativeRegExp extends ScriptableObject {
                 c = 0xB;
                 doFlat(state, c);
                 break;
-            /* Control letter */
+                /* Control letter */
             case 'c':
                 if ((state.cp < state.cpend) && isControlLetter(src[state.cp]))
                     c = (char) (src[state.cp++] & 0x1F);
@@ -1608,7 +1608,7 @@ public class NativeRegExp extends ScriptableObject {
                 }
                 doFlat(state, c);
                 break;
-            /* UnicodeEscapeSequence */
+                /* UnicodeEscapeSequence */
             case 'u':
                 if (!parseRegExpUnicodeEscapeSequence(state, params)) {
                     state.cp--; // rewind to the 'u'
@@ -1634,7 +1634,7 @@ public class NativeRegExp extends ScriptableObject {
                     doFlat(state, (char) n);
                 }
                 break;
-            /* Character class escapes */
+                /* Character class escapes */
             case 'd':
                 state.result = new RENode(REOP_DIGIT);
                 state.progLength++;
@@ -1666,7 +1666,7 @@ public class NativeRegExp extends ScriptableObject {
                     reportError("msg.invalid.property", "");
                 }
                 break;
-            /* IdentityEscape */
+                /* IdentityEscape */
             default:
                 state.cp--;
                 return parseIdentityEscape(state, params);
@@ -1826,7 +1826,7 @@ public class NativeRegExp extends ScriptableObject {
         int termStart;
 
         switch (c) {
-            /* assertions and atoms */
+                /* assertions and atoms */
             case '^':
                 state.result = new RENode(REOP_BOL);
                 state.progLength++;
@@ -1840,7 +1840,7 @@ public class NativeRegExp extends ScriptableObject {
                 if (state.cp < state.cpend) {
                     c = src[state.cp++];
                     switch (c) {
-                        /* assertion escapes */
+                            /* assertion escapes */
                         case 'b':
                             state.result = new RENode(REOP_WBDRY);
                             state.progLength++;
@@ -1893,7 +1893,7 @@ public class NativeRegExp extends ScriptableObject {
                                 }
                                 break;
                             }
-                        /* fall through */
+                            /* fall through */
                         default:
                             state.cp--;
                             if (!parseCharacterAndCharacterClassEscape(state, params)) {
@@ -2198,7 +2198,7 @@ public class NativeRegExp extends ScriptableObject {
                     pc += INDEX_LEN;
                     addIndex(program, pc, ignoreCase ? upcase((char) t.index) : t.index);
                     pc += INDEX_LEN;
-                // fall through to REOP_ALT
+                    // fall through to REOP_ALT
                 case REOP_ALT:
                     nextAlt = t.kid2;
                     nextAltFixup = pc; /* address of next alternate */
@@ -2721,8 +2721,8 @@ public class NativeRegExp extends ScriptableObject {
                 result = true;
                 break;
 
-            // We just use gData.cp and not cpToMatch in the BOL, EOL, WBDRY, WNONBDRY cases
-            // since their behaviour is identical in both forward and backward matching
+                // We just use gData.cp and not cpToMatch in the BOL, EOL, WBDRY, WNONBDRY cases
+                // since their behaviour is identical in both forward and backward matching
             case REOP_BOL:
                 if (gData.cp != 0) {
                     if (!gData.multiline || !isLineTerm(input.charAt(gData.cp - 1))) {
@@ -3054,8 +3054,8 @@ public class NativeRegExp extends ScriptableObject {
                                 }
                             }
                         }
-                    /* else false thru... */
-                    // fall through
+                        /* else false thru... */
+                        // fall through
                     case REOP_ALT:
                         {
                             int nextpc = pc + getOffset(program, pc);
@@ -3273,28 +3273,28 @@ public class NativeRegExp extends ScriptableObject {
                             switch (op) {
                                 case REOP_STAR:
                                     greedy = true;
-                                // fallthrough
+                                    // fallthrough
                                 case REOP_MINIMALSTAR:
                                     min = 0;
                                     max = -1;
                                     break;
                                 case REOP_PLUS:
                                     greedy = true;
-                                // fallthrough
+                                    // fallthrough
                                 case REOP_MINIMALPLUS:
                                     min = 1;
                                     max = -1;
                                     break;
                                 case REOP_OPT:
                                     greedy = true;
-                                // fallthrough
+                                    // fallthrough
                                 case REOP_MINIMALOPT:
                                     min = 0;
                                     max = 1;
                                     break;
                                 case REOP_QUANT:
                                     greedy = true;
-                                // fallthrough
+                                    // fallthrough
                                 case REOP_MINIMALQUANT:
                                     min = getOffset(program, pc);
                                     pc += INDEX_LEN;

@@ -37,12 +37,12 @@ import org.mozilla.javascript.lc.type.TypeInfoFactory;
  */
 class JavaMembers {
 
-    private static final List<String> whitelists = List.of(
-            // @Hint by SuperMonster003 on Oct 15, 2023.
-            //  ! Android API 30 and below will throw a ClassNotFoundException
-            //  ! with library androidx.appcompat (version 1.6.0+).
-            "AccessibilityNodeInfo$ExtraRenderingInfo"
-    );
+    private static final List<String> whitelists =
+            List.of(
+                    // @Hint by SuperMonster003 on Oct 15, 2023.
+                    //  ! Android API 30 and below will throw a ClassNotFoundException
+                    //  ! with library androidx.appcompat (version 1.6.0+).
+                    "AccessibilityNodeInfo$ExtraRenderingInfo");
 
     private static final boolean STRICT_REFLECTIVE_ACCESS = true;
 
@@ -738,7 +738,7 @@ class JavaMembers {
             if (method.getArgTypes().isEmpty() && (!isStatic || method.isStatic())) {
                 try {
                     var type = method.getReturnType();
-                if (type != TypeInfo.PRIMITIVE_VOID) {
+                    if (type != TypeInfo.PRIMITIVE_VOID) {
                         return method;
                     }
                     break;

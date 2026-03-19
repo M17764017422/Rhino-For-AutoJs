@@ -2147,7 +2147,8 @@ public final class IRFactory {
     //  !   at java.util.WeakHashMap.containsKey(WeakHashMap.java:418)
     //  !   at java.util.Collections$SetFromMap.contains(Collections.java:5516)
     //  !   at org.autojs.autojs.lang.ThreadCompat.isInterrupted(ThreadCompat.java:56)
-    //  !   at org.autojs.autojs.rhino.InterruptibleAndroidContextFactory.observeInstructionCount(InterruptibleAndroidContextFactory.java:28)
+    //  !   at
+    // org.autojs.autojs.rhino.InterruptibleAndroidContextFactory.observeInstructionCount(InterruptibleAndroidContextFactory.java:28)
     //  !   at org.mozilla.javascript.Context.observeInstructionCount(Context.java:2402)
     //  !   at org.mozilla.javascript.Interpreter.addInstructionCount(Interpreter.java:4064)
     //  !   at org.mozilla.javascript.Interpreter.interpretLoop(Interpreter.java:2725)
@@ -2156,7 +2157,8 @@ public final class IRFactory {
     //  !   ... ...
     //  !   at org.mozilla.javascript.AccessorSlot.getValue(AccessorSlot.java:106)
     //  !   at org.mozilla.javascript.ScriptableObject.get(ScriptableObject.java:233)
-    //  !   at org.mozilla.javascript.ScriptableObject.getPropWalkingPrototypeChain(ScriptableObject.java:2305)
+    //  !   at
+    // org.mozilla.javascript.ScriptableObject.getPropWalkingPrototypeChain(ScriptableObject.java:2305)
     //  !   at org.mozilla.javascript.ScriptableObject.getProperty(ScriptableObject.java:2290)
     //  !   at org.mozilla.javascript.ScriptRuntime.getObjectProp(ScriptRuntime.java:1798)
     //  !   at org.mozilla.javascript.ScriptRuntime.getObjectProp(ScriptRuntime.java:1794)
@@ -2164,10 +2166,14 @@ public final class IRFactory {
     //  !   at org.mozilla.javascript.Interpreter.interpret(Interpreter.java:1192)
     //  !   at org.mozilla.javascript.InterpretedFunction.call(InterpretedFunction.java:87)
     //  !   at org.mozilla.javascript.ArrowFunction.call(ArrowFunction.java:52)
-    //  !   at org.mozilla.javascript.ArrayLikeAbstractOperations.coercibleIterativeMethod(ArrayLikeAbstractOperations.java:184)
-    //  !   at org.mozilla.javascript.ArrayLikeAbstractOperations.iterativeMethod(ArrayLikeAbstractOperations.java:121)
-    //  !   at org.mozilla.javascript.ArrayLikeAbstractOperations.iterativeMethod(ArrayLikeAbstractOperations.java:95)
-    //  !   at org.mozilla.javascript.NativeArray$$ExternalSyntheticLambda1.call(D8$$SyntheticClass:0)
+    //  !   at
+    // org.mozilla.javascript.ArrayLikeAbstractOperations.coercibleIterativeMethod(ArrayLikeAbstractOperations.java:184)
+    //  !   at
+    // org.mozilla.javascript.ArrayLikeAbstractOperations.iterativeMethod(ArrayLikeAbstractOperations.java:121)
+    //  !   at
+    // org.mozilla.javascript.ArrayLikeAbstractOperations.iterativeMethod(ArrayLikeAbstractOperations.java:95)
+    //  !   at
+    // org.mozilla.javascript.NativeArray$$ExternalSyntheticLambda1.call(D8$$SyntheticClass:0)
     //  !   at org.mozilla.javascript.Interpreter.doCallByteCode(Interpreter.java:3033)
     //  !   at org.mozilla.javascript.Interpreter.interpretLoop(Interpreter.java:1990)
     //  !   at org.mozilla.javascript.Interpreter.interpret(Interpreter.java:1192)
@@ -2175,8 +2181,10 @@ public final class IRFactory {
     //  !   at android.os.Handler.dispatchMessage(Handler.java:99)
     //  !   at android.os.Looper.loopOnce(Looper.java:346)
     //  !   at android.os.Looper.loop(Looper.java:475)
-    //  !   at org.autojs.autojs.engine.LoopBasedJavaScriptEngine.execute(LoopBasedJavaScriptEngine.java:41)
-    //  !   at org.autojs.autojs.execution.LoopedBasedJavaScriptExecution.doExecution(LoopedBasedJavaScriptExecution.java:46)
+    //  !   at
+    // org.autojs.autojs.engine.LoopBasedJavaScriptEngine.execute(LoopBasedJavaScriptEngine.java:41)
+    //  !   at
+    // org.autojs.autojs.execution.LoopedBasedJavaScriptExecution.doExecution(LoopedBasedJavaScriptExecution.java:46)
     //  !   at java.lang.Thread.run(Thread.java:1012)
     //  #
     //  # private Node createPropertyGet(
@@ -2187,11 +2195,13 @@ public final class IRFactory {
     //  #         }
     //  #         parser.checkActivationName(name, Token.GETPROP);
     //  #
-    //  #         if (target.getType() == Token.SUPER && ScriptRuntime.isSpecialSuperProperty(name)) {
+    //  #         if (target.getType() == Token.SUPER && ScriptRuntime.isSpecialSuperProperty(name))
+    // {
     //  #             // We have access to super.__proto__ or super.__parent__.
     //  #             // This needs to behave in the same way as this.__proto__ - it really is not
     //  #             // obvious why, but you can test it in v8 or any other engine. So, we just
-    //  #             // replace SUPER with THIS in the AST. It's a bit hacky, but it works - see the
+    //  #             // replace SUPER with THIS in the AST. It's a bit hacky, but it works - see
+    // the
     //  #             // test cases in SuperTest!
     //  #             if (!(target instanceof KeywordLiteral)) {
     //  #                 throw Kit.codeBug();

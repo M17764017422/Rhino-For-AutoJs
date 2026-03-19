@@ -4,9 +4,8 @@
 
 package org.mozilla.javascript;
 
-import org.mozilla.javascript.TopLevel.NativeErrors;
-
 import java.util.ArrayList;
+import org.mozilla.javascript.TopLevel.NativeErrors;
 
 public class NativePromise extends ScriptableObject {
 

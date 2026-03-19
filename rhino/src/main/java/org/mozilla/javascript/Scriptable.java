@@ -78,9 +78,7 @@ public interface Scriptable {
      */
     public Object get(String name, Scriptable start);
 
-    /**
-     * Get a named property from current object.
-     */
+    /** Get a named property from current object. */
     public default Object get(String name) {
         return get(name, this);
     }
@@ -113,9 +111,7 @@ public interface Scriptable {
      */
     public boolean has(String name, Scriptable start);
 
-    /**
-     * Indicates whether or not a named property is defined in current object.
-     */
+    /** Indicates whether or not a named property is defined in current object. */
     public default boolean has(String name) {
         return has(name, this);
     }
