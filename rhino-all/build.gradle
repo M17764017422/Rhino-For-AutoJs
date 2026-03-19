@@ -30,15 +30,12 @@ shadowJar {
     manifest {
         attributes 'Main-Class': 'org.mozilla.javascript.tools.shell.Main'
     }
-    // Exclude JLine FFM classes and resources (Java 22 bytecode) for Android compatibility
-    // FFM (Foreign Function & Memory) API requires Java 22+
+    // 仅排除 JLine FFM 类（需要 Java 22+）
+    // 桌面版保留所有其他 JLine 终端功能
     exclude 'org/jline/terminal/impl/ffm/**'
     exclude 'META-INF/maven/org.jline/jline-terminal-ffm/**'
     exclude 'META-INF/native-image/org.jline/jline-terminal-ffm/**'
     exclude 'META-INF/services/org.jline.terminal.provider.ffm'
-    exclude 'META-INF/services/org/jline/terminal/provider/ffm'
-    // Exclude JLine service directory entries (empty directories cause D8 NullPointerException)
-    exclude 'META-INF/services/org/jline/**'
 }
 
 // ========== Android JAR (rhino-android-all-*.jar) ==========
