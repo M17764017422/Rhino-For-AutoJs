@@ -140,30 +140,95 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ needs.build.outputs.version }}-${{ needs.build.outputs.short_sha }}
-        name: Rhino for AutoJs6 ${{ needs.build.outputs.version }} (${{ needs.build.outputs.short_sha }})
+        name: Rhino for AutoJs ${{ needs.build.outputs.version }} (${{ needs.build.outputs.short_sha }})
         body: |
-          ## Rhino for AutoJs6 ${{ needs.build.outputs.version }}
+          ## Rhino for AutoJs ${{ needs.build.outputs.version }}
           
-          基于 mozilla/rhino，保留 AutoJs6 兼容性定制修改。
+          基于 [mozilla/rhino](https://github.com/mozilla/rhino)，保留 AutoJs 兼容性定制修改。
+          
+          ---
           
           ### 包含文件
-          - `rhino-*.jar` - **核心模块（Android 兼容）**，无 JLine 依赖
-          - `rhino-all-*.jar` - 完整模块（桌面应用），包含 JLine 终端工具
-          - `rhino-android-all-*.jar` - **完整模块（Android 优化）**，不含 JLine，体积更小
+          
+          | 文件 | 大小 | 用途 | 说明 |
+          |------|------|------|------|
+          | `rhino-*.jar` | ~1.8 MB | Android 轻量版 | 仅核心引擎，无外部依赖 |
+          | `rhino-android-all-*.jar` | ~2.0 MB | Android 完整版 | 含 XML/Tools/兼容层，无 JLine |
+          | `rhino-all-*.jar` | ~2.8 MB | 桌面应用 | 完整功能，含 JLine 终端 |
+          
+          ---
+          
+          ### 模块内容
+          
+          **rhino-*.jar (核心模块)**
+          - JavaScript 引擎核心
+          - 原生对象 (Array, Object, Function, Promise, etc.)
+          - 正则表达式引擎
+          - 类型化数组
+          - AST 解析器
+          - LiveConnect (Java 互操作)
+          
+          **rhino-android-all-*.jar / rhino-all-*.jar (完整模块)**
+          - 核心模块 +
+          - `rhino-xml`: E4X XML 支持
+          - `rhino-tools`: Shell、Debugger、Compiler
+          - `rhino-compat`: API 兼容层 (WrapFactoryCompat, NativeFunctionAdapter)
+          - `rhino-all` 特有: JLine 3.30.6 终端 (不含 FFM)
+          
+          ---
           
           ### 保留的定制修改
-          - VMBridge: Android 7.x 兼容性（无 VarHandle）
-          - IRFactory: StackOverflowError 修复
-          - MemberBox: 公共访问器和 VMBridge 调用
-          - SlotMapOwner: synchronized 替代 VarHandle
-          - NativeJavaObject: legacyStaticType 构造函数
-          - ScriptableObject: toScriptableObject 方法
-          - ImporterTopLevel: String 参数支持
+          
+          - **VMBridge**: Android 7.x 兼容性（无 VarHandle）
+          - **IRFactory**: StackOverflowError 修复
+          - **MemberBox**: 公共访问器和 VMBridge 调用
+          - **SlotMapOwner**: synchronized 替代 VarHandle
+          - **NativeJavaObject**: legacyStaticType 构造函数
+          - **ScriptableObject**: toScriptableObject 方法
+          - **ImporterTopLevel**: String 参数支持
+          
+          ---
           
           ### 使用方法
-          - **Android 项目（轻量）**: 使用 `rhino-*.jar`（仅核心，Java 11 字节码）
-          - **Android 项目（完整）**: 使用 `rhino-android-all-*.jar`（无 JLine，体积更小）
-          - **桌面应用**: 使用 `rhino-all-*.jar`（包含终端工具）
+          
+          **Android 项目 (Gradle)**
+          ```groovy
+          // 轻量版 - 仅核心引擎
+          implementation files('libs/rhino-2.0.0-SNAPSHOT.jar')
+          
+          // 完整版 - 包含 XML/Tools/兼容层
+          implementation files('libs/rhino-android-all-2.0.0-SNAPSHOT.jar')
+          ```
+          
+          **桌面应用**
+          ```bash
+          java -jar rhino-all-2.0.0-SNAPSHOT.jar
+          ```
+          
+          **GitHub Packages (Maven)**
+          ```xml
+          <repository>
+            <id>github</id>
+            <url>https://maven.pkg.github.com/M17764017422/Rhino-For-AutoJs</url>
+          </repository>
+          
+          <dependency>
+            <groupId>org.mozilla.javascript</groupId>
+            <artifactId>rhino</artifactId>
+            <version>2.0.0-SNAPSHOT</version>
+          </dependency>
+          ```
+          
+          ---
+          
+          ### 兼容性
+          
+          | 平台 | 最低版本 |
+          |------|---------|
+          | Android | API 21+ (Android 5.0) |
+          | Java Desktop | Java 11+ |
+          
+          > **注意**: JLine FFM 终端已排除，兼容 Java 17-21。Java 22+ 可使用原生 FFM 终端。
         files: |
           ./artifacts/core/*.jar
           ./artifacts/all/*.jar

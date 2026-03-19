@@ -1,4 +1,6 @@
-# Rhino: JavaScript in Java
+# Rhino for AutoJs
+
+> 基于 [mozilla/rhino](https://github.com/mozilla/rhino)，保留 AutoJs 兼容性定制修改
 
 <a title="Rodrigo J De Marco, CC0, via Wikimedia Commons" href="https://commons.wikimedia.org/wiki/File:Rhino_(234581759).jpeg"><img width="384" alt="Rhino (234581759)" src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Rhino_%28234581759%29.jpeg/512px-Rhino_%28234581759%29.jpeg"></a>
 
@@ -7,6 +9,35 @@ Rhino is an implementation of JavaScript in Java.
 ## License
 
 Rhino is licensed under the [MPL 2.0](./LICENSE.txt).
+
+## JAR 文件
+
+| 文件 | 用途 | 说明 |
+|------|------|------|
+| `rhino-*.jar` | Android 轻量版 | 仅核心引擎，无外部依赖 |
+| `rhino-android-all-*.jar` | Android 完整版 | 含 XML/Tools/兼容层，无 JLine |
+| `rhino-all-*.jar` | 桌面应用 | 完整功能，含 JLine 终端 |
+
+## 兼容性定制
+
+相比官方 Rhino，本仓库保留了以下修改：
+
+- **VMBridge**: Android 7.x 兼容性（无 VarHandle）
+- **IRFactory**: StackOverflowError 修复
+- **MemberBox**: 公共访问器和 VMBridge 调用
+- **SlotMapOwner**: synchronized 替代 VarHandle
+- **NativeJavaObject**: legacyStaticType 构造函数
+- **ScriptableObject**: toScriptableObject 方法
+- **ImporterTopLevel**: String 参数支持
+
+## 兼容层 (rhino-compat)
+
+提供 Rhino 1.x → 2.x 迁移兼容性：
+
+- `WrapFactoryCompat`: 使用旧版 `Class<?>` 签名
+- `NativeFunctionAdapter`: JSFunction 适配为 NativeFunction
+- `FunctionCompat`: 函数类型检测工具
+- `E4XCompat`: E4X 初始化兼容
 
 ## Summary
 

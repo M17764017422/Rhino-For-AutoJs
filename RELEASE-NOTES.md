@@ -1,3 +1,43 @@
+# Rhino for AutoJs 2.0.0-SNAPSHOT
+
+## 基于 mozilla/rhino，保留 AutoJs 兼容性定制修改
+
+### 新增模块
+
+- **rhino-compat**: Rhino 1.x → 2.x 迁移兼容层
+  - `WrapFactoryCompat`: 使用旧版 `Class<?>` 签名替代 `TypeInfo`
+  - `NativeFunctionAdapter`: JSFunction 适配为 NativeFunction
+  - `FunctionCompat`: 函数类型检测工具（箭头函数、生成器函数等）
+  - `E4XCompat`: E4X 初始化兼容
+  - `RhinoCompat`: 统一兼容 API 入口
+
+### JAR 文件
+
+| 文件 | 用途 | 包含内容 |
+|------|------|----------|
+| `rhino-*.jar` | Android 轻量版 | 核心引擎 |
+| `rhino-android-all-*.jar` | Android 完整版 | 核心 + XML + Tools + Compat |
+| `rhino-all-*.jar` | 桌面应用 | 完整版 + JLine 终端 |
+
+### 保留的定制修改
+
+- **VMBridge**: Android 7.x 兼容性（无 VarHandle）
+- **IRFactory**: StackOverflowError 修复
+- **MemberBox**: 公共访问器和 VMBridge 调用
+- **SlotMapOwner**: synchronized 替代 VarHandle
+- **NativeJavaObject**: legacyStaticType 构造函数
+- **ScriptableObject**: toScriptableObject 方法
+- **ImporterTopLevel**: String 参数支持
+
+### 兼容性
+
+| 平台 | 最低版本 |
+|------|---------|
+| Android | API 21+ (Android 5.0) |
+| Java Desktop | Java 11+ |
+
+---
+
 # Rhino 1.9.0
 ## December 22, 2025
 
