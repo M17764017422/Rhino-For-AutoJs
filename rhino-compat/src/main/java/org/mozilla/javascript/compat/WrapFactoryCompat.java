@@ -7,13 +7,12 @@
 
 package org.mozilla.javascript.compat;
 
-import org.mozilla.javascript.*;
-import org.mozilla.javascript.lc.type.TypeInfo;
-import org.mozilla.javascript.lc.type.TypeInfoFactory;
-
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
+import org.mozilla.javascript.*;
+import org.mozilla.javascript.lc.type.TypeInfo;
+import org.mozilla.javascript.lc.type.TypeInfoFactory;
 
 /**
  * WrapFactory 兼容基类
@@ -58,9 +57,7 @@ public abstract class WrapFactoryCompat extends WrapFactory {
     @Override
     public Object wrap(Context cx, Scriptable scope, Object obj, TypeInfo staticType) {
         Class<?> staticClass =
-                (staticType != null && staticType != TypeInfo.NONE)
-                        ? staticType.asClass()
-                        : null;
+                (staticType != null && staticType != TypeInfo.NONE) ? staticType.asClass() : null;
         return wrapCompat(cx, scope, obj, staticClass);
     }
 
@@ -77,8 +74,7 @@ public abstract class WrapFactoryCompat extends WrapFactory {
      * @param staticType 类型提示，用于改进泛型支持和回退类型
      * @return 包装后的值
      */
-    protected Object wrapCompat(
-            Context cx, Scriptable scope, Object obj, Class<?> staticType) {
+    protected Object wrapCompat(Context cx, Scriptable scope, Object obj, Class<?> staticType) {
         // === 复制自 WrapFactory.wrap() 核心逻辑 ===
         // 注意：不能调用 super.wrap(..., Class)，会死循环！
 
@@ -147,10 +143,8 @@ public abstract class WrapFactoryCompat extends WrapFactory {
         // === 复制自 WrapFactory.wrapAsJavaObject() 核心逻辑 ===
 
         // 获取实际类型
-        TypeInfoFactory factory =
-                TypeInfoFactory.getOrElse(scope, TypeInfoFactory.GLOBAL);
-        TypeInfo actualType =
-                (staticType != null) ? factory.create(staticType) : TypeInfo.NONE;
+        TypeInfoFactory factory = TypeInfoFactory.getOrElse(scope, TypeInfoFactory.GLOBAL);
+        TypeInfo actualType = (staticType != null) ? factory.create(staticType) : TypeInfo.NONE;
 
         if (actualType.shouldReplace() && javaObject != null) {
             actualType = factory.create(javaObject.getClass());
@@ -173,9 +167,7 @@ public abstract class WrapFactoryCompat extends WrapFactory {
 
     // ========== wrapNewObject 保持不变 ==========
 
-    /**
-     * wrapNewObject 通常不需要重写 如需自定义，重写此方法
-     */
+    /** wrapNewObject 通常不需要重写 如需自定义，重写此方法 */
     @Override
     public Scriptable wrapNewObject(Context cx, Scriptable scope, Object obj) {
         if (obj instanceof Scriptable) {

@@ -12,25 +12,24 @@ import org.mozilla.javascript.ImporterTopLevel;
 import org.mozilla.javascript.NativeArray;
 import org.mozilla.javascript.NativeJavaObject;
 import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
-import org.mozilla.javascript.WrapFactory;
 
 /**
  * Tests for {@link WrapFactoryCompat}.
- * 
+ *
  * <p>验证兼容层：
+ *
  * <ul>
- *   <li>不会产生死循环</li>
- *   <li>正确转换 TypeInfo 和 Class</li>
- *   <li>子类可以重写 wrapCompat 方法</li>
+ *   <li>不会产生死循环
+ *   <li>正确转换 TypeInfo 和 Class
+ *   <li>子类可以重写 wrapCompat 方法
  * </ul>
  */
 public class WrapFactoryCompatTest {
 
     /**
      * 验证 WrapFactoryCompat 不会产生死循环。
-     * 
+     *
      * <p>这是最重要的测试，确保兼容层可以正常工作。
      */
     @Test
@@ -57,9 +56,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试 null 值处理。
-     */
+    /** 测试 null 值处理。 */
     @Test
     public void testWrapNull() {
         try (Context cx = Context.enter()) {
@@ -73,9 +70,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试 undefined 值处理。
-     */
+    /** 测试 undefined 值处理。 */
     @Test
     public void testWrapUndefined() {
         try (Context cx = Context.enter()) {
@@ -89,9 +84,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试 Scriptable 对象直接返回。
-     */
+    /** 测试 Scriptable 对象直接返回。 */
     @Test
     public void testWrapScriptable() {
         try (Context cx = Context.enter()) {
@@ -106,9 +99,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试原始类型包装。
-     */
+    /** 测试原始类型包装。 */
     @Test
     public void testWrapPrimitive() {
         try (Context cx = Context.enter()) {
@@ -132,9 +123,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试 List 包装为 NativeJavaList。
-     */
+    /** 测试 List 包装为 NativeJavaList。 */
     @Test
     public void testWrapList() {
         try (Context cx = Context.enter()) {
@@ -151,9 +140,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试 Map 包装为 NativeJavaMap。
-     */
+    /** 测试 Map 包装为 NativeJavaMap。 */
     @Test
     public void testWrapMap() {
         try (Context cx = Context.enter()) {
@@ -170,9 +157,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试数组包装为 NativeJavaArray。
-     */
+    /** 测试数组包装为 NativeJavaArray。 */
     @Test
     public void testWrapArray() {
         try (Context cx = Context.enter()) {
@@ -188,9 +173,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试普通 Java 对象包装。
-     */
+    /** 测试普通 Java 对象包装。 */
     @Test
     public void testWrapJavaObject() {
         try (Context cx = Context.enter()) {
@@ -206,9 +189,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试 wrapNewObject 方法。
-     */
+    /** 测试 wrapNewObject 方法。 */
     @Test
     public void testWrapNewObject() {
         try (Context cx = Context.enter()) {
@@ -224,9 +205,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试子类可以自定义 wrapCompat 行为。
-     */
+    /** 测试子类可以自定义 wrapCompat 行为。 */
     @Test
     public void testCustomWrapCompat() {
         try (Context cx = Context.enter()) {
@@ -242,9 +221,7 @@ public class WrapFactoryCompatTest {
         }
     }
 
-    /**
-     * 测试子类可以自定义 wrapAsJavaObjectCompat 行为。
-     */
+    /** 测试子类可以自定义 wrapAsJavaObjectCompat 行为。 */
     @Test
     public void testCustomWrapAsJavaObjectCompat() {
         try (Context cx = Context.enter()) {

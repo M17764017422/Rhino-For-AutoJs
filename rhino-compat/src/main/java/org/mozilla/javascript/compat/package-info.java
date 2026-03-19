@@ -13,10 +13,12 @@
  * <h2>主要组件</h2>
  *
  * <ul>
- *   <li>{@link org.mozilla.javascript.compat.WrapFactoryCompat} - WrapFactory 兼容基类，支持旧版 Class&lt;?&gt; 签名
+ *   <li>{@link org.mozilla.javascript.compat.WrapFactoryCompat} - WrapFactory 兼容基类，支持旧版
+ *       Class&lt;?&gt; 签名
  *   <li>{@link org.mozilla.javascript.compat.RhinoCompat} - 主入口类，提供初始化和函数操作方法
  *   <li>{@link org.mozilla.javascript.compat.FunctionCompat} - 函数类型兼容工具
- *   <li>{@link org.mozilla.javascript.compat.NativeFunctionAdapter} - JSFunction 到 NativeFunction 的适配器
+ *   <li>{@link org.mozilla.javascript.compat.NativeFunctionAdapter} - JSFunction 到 NativeFunction
+ *       的适配器
  * </ul>
  *
  * <h2>迁移指南</h2>

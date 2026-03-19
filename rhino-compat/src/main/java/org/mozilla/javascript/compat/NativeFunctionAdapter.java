@@ -233,7 +233,8 @@ public final class NativeFunctionAdapter extends NativeFunction {
     /**
      * 反编译函数源码
      *
-     * <p>Rhino 2.0.0+ 中 BaseFunction.decompile() 是包私有的， 使用 Context.decompileFunction() 或 getRawSource() 替代
+     * <p>Rhino 2.0.0+ 中 BaseFunction.decompile() 是包私有的， 使用 Context.decompileFunction() 或
+     * getRawSource() 替代
      *
      * <p>注意：此方法不能覆盖父类的包私有方法，仅作为辅助方法提供
      *
