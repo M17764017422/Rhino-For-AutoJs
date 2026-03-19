@@ -43,79 +43,59 @@ shadowJar {
 
 // ========== Android JAR (rhino-android-all-*.jar) ==========
 // 不包含 JLine 终端工具，适用于 Android 项目
-// 使用标准 Jar 任务合并依赖（避免在 Groovy DSL 中引用插件类）
 
-tasks.register('shadowJarAndroid', Jar) {
-    description = 'Create Android-optimized all-in-one JAR without terminal tools'
+// 方案：复制 shadowJar 任务并修改配置
+// shadowJar 已由插件创建，我们创建一个变体版
+
+tasks.register('shadowJarAndroid') {
     group = 'build'
+    description = 'Create Android-optimized all-in-one JAR without terminal tools'
     
-    // 输出配置
-    archiveBaseName.set('rhino-android-all')
-    archiveClassifier.set('')
-    archiveVersion.set(project.version.toString())
+    // 输出文件
+    def outputDir = layout.buildDirectory.dir('libs')
+    def outputFile = outputDir.map { it.file("rhino-android-all-${project.version}.jar") }
+    outputs.file(outputFile)
     
-    // 包含所有运行时依赖（排除 JLine）
-    from({
-        configurations.runtimeClasspath.collect { 
-            it.isDirectory() ? it : zipTree(it) 
-        }
-    }) {
-        exclude 'META-INF/*.SF'
-        exclude 'META-INF/*.DSA'
-        exclude 'META-INF/*.RSA'
-        // 排除 JLine 相关类
-        exclude 'org/jline/**'
-        exclude 'META-INF/maven/org.jline/**'
-        exclude 'META-INF/native-image/org.jline/**'
-        exclude 'META-INF/services/org.jline.*'
-        exclude 'META-INF/services/org/jline/**'
-    }
+    // 依赖
+    dependsOn tasks.shadowJar
     
-    // 包含本模块编译输出
-    with jar
-    
-    // 处理重复文件
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-    
-    // Android 不需要 Main-Class
-    manifest {
-        attributes(
-            'Implementation-Title': 'Rhino Android All-in-One',
-            'Implementation-Version': project.version,
-            'Built-For': 'Android (Java 11 bytecode, no terminal tools)'
-        )
-    }
-    
-    // 手动合并 META-INF/services 文件
-    // 使用 doFirst 在执行阶段处理
-    doFirst {
-        def servicesDir = temporaryDir.toPath().resolve('META-INF/services')
-        java.nio.file.Files.createDirectories(servicesDir)
+    doLast {
+        def shadowJarTask = tasks.shadowJar
+        def inputJar = shadowJarTask.archiveFile.get().asFile
+        def outputJar = outputFile.get().asFile
         
-        configurations.runtimeClasspath.each { dep ->
-            if (dep.name.endsWith('.jar')) {
-                zipTree(dep).matching { 
-                    include 'META-INF/services/*' 
-                    exclude 'META-INF/services/org.jline*'
-                }.each { file ->
-                    def serviceName = file.name
-                    def targetFile = servicesDir.resolve(serviceName).toFile()
-                    if (targetFile.exists()) {
-                        file.eachLine { line ->
-                            if (!targetFile.text.contains(line)) {
-                                targetFile << line + '\n'
-                            }
-                        }
-                    } else {
-                        targetFile << file.text
-                    }
-                }
+        // 使用 ZipInputStream/ZipOutputStream 过滤 JLine
+        java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(new FileInputStream(inputJar))
+        java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(new FileOutputStream(outputJar))
+        
+        java.util.zip.ZipEntry entry
+        while ((entry = zis.getNextEntry()) != null) {
+            String name = entry.getName()
+            // 过滤 JLine 相关文件
+            if (name.startsWith('org/jline/') ||
+                name.contains('jline-terminal-ffm') ||
+                name.startsWith('META-INF/maven/org.jline/') ||
+                name.startsWith('META-INF/native-image/org.jline/') ||
+                name.startsWith('META-INF/services/org.jline') ||
+                name.startsWith('META-INF/services/org/jline/')) {
+                continue
             }
+            
+            java.util.zip.ZipEntry newEntry = new java.util.zip.ZipEntry(name)
+            zos.putNextEntry(newEntry)
+            
+            byte[] buffer = new byte[4096]
+            int len
+            while ((len = zis.read(buffer)) > 0) {
+                zos.write(buffer, 0, len)
+            }
+            zos.closeEntry()
         }
         
-        from(temporaryDir) {
-            include 'META-INF/services/*'
-        }
+        zis.close()
+        zos.close()
+        
+        logger.lifecycle("Created Android JAR: ${outputJar}")
     }
 }
 
@@ -163,7 +143,7 @@ publishing {
         
         rhinoandroidall(MavenPublication) {
             artifactId = 'rhino-android-all'
-            artifact tasks.shadowJarAndroid.archiveFile.map { it.get() }
+            artifact tasks.shadowJarAndroid.outputs.files.singleFile
             artifact sourceJar
             artifact javadocJar
             
