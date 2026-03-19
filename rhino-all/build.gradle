@@ -8,11 +8,14 @@ dependencies {
     implementation project(':rhino-tools')
     implementation project(':rhino-xml')
     implementation project(':rhino-compat')
-    // Include JLine so that the stand-alone JAR gets a nice terminal
+    // Include JLine so that the stand-alone JAR gets a nice terminal (desktop only)
     runtimeOnly libs.jline.terminal
     runtimeOnly libs.jline.reader
     runtimeOnly libs.bundles.jline.runtime
 }
+
+// ========== Desktop JAR (rhino-all-*.jar) ==========
+// 包含 JLine 终端工具，适用于桌面应用
 
 shadowJar {
     // Ensure that the "jar" from this step is the shadowed one that we want to 
@@ -38,6 +41,57 @@ shadowJar {
     exclude 'META-INF/services/org/jline/**'
 }
 
+// ========== Android JAR (rhino-android-all-*.jar) ==========
+// 不包含 JLine 终端工具，适用于 Android 项目
+
+tasks.register('shadowJarAndroid', com.gradleup.shadow.ShadowJar) {
+    description = 'Create Android-optimized all-in-one JAR without terminal tools'
+    group = 'build'
+    
+    // 输出配置
+    archiveBaseName.set('rhino-android-all')
+    archiveClassifier.set('')
+    archiveVersion.set(project.version.toString())
+    
+    // 包含所有模块（不含 JLine）
+    from(project.configurations.runtimeClasspath.collect { 
+        it.isDirectory() ? it : zipTree(it) 
+    }) {
+        // 排除 JLine 相关类
+        exclude 'org/jline/**'
+        exclude 'META-INF/maven/org.jline/**'
+        exclude 'META-INF/native-image/org.jline/**'
+        exclude 'META-INF/services/org.jline.*'
+        exclude 'META-INF/services/org/jline/**'
+    }
+    
+    // 包含本模块编译输出
+    with(project.tasks.jar.archiveFile.map { 
+        zipTree(it.get()) 
+    })
+    
+    // Merge service files
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    mergeServiceFiles()
+    filesNotMatching('META-INF/services/**') {
+        duplicatesStrategy = DuplicatesStrategy.WARN
+    }
+    
+    // Android 不需要 Main-Class
+    manifest {
+        attributes(
+            'Implementation-Title': 'Rhino Android All-in-One',
+            'Implementation-Version': project.version,
+            'Built-For': 'Android (Java 11 bytecode, no terminal tools)'
+        )
+    }
+}
+
+// 让 build 任务依赖 shadowJarAndroid
+tasks.build.dependsOn tasks.shadowJarAndroid
+
+// ========== Publishing ==========
+
 publishing {
     publications {
         rhinoall(MavenPublication) {
@@ -47,7 +101,45 @@ publishing {
                 def root = asNode()
 
                 root.appendNode('name', 'rhino-all')
-                root.appendNode('description', "Rhino JavaScript all-in-one JAR, not for use with modular Java projects")
+                root.appendNode('description', "Rhino JavaScript all-in-one JAR for desktop applications (includes terminal tools)")
+                root.appendNode("url", "https://mozilla.github.io/rhino/")
+
+                def p = root.appendNode("parent")
+                p.appendNode("groupId", "org.sonatype.oss")
+                p.appendNode("artifactId", "oss-parent")
+                p.appendNode("version", "7")
+
+                def l = root.appendNode("licenses").appendNode("license")
+                l.appendNode("name", "Mozilla Public License, Version 2.0")
+                l.appendNode("url", "http://www.mozilla.org/MPL/2.0/index.txt")
+
+                def scm = root.appendNode("scm")
+                scm.appendNode("connection", "scm:git:git@github.com:mozilla/rhino.git")
+                scm.appendNode("developerConnection", "scm:git:git@github.com:mozilla/rhino.git")
+                scm.appendNode("url", "git@github.com:mozilla/rhino.git")
+
+                def o = root.appendNode("organization")
+                o.appendNode("name", "The Mozilla Foundation")
+                o.appendNode("url", "http://www.mozilla.org")
+
+                def d = root.appendNode("developers")
+                def dd = d.appendNode("developer")
+                dd.appendNode("name", "Greg Brail")
+                dd.appendNode("email", "gbrail@users.noreply.github.com")
+            }
+        }
+        
+        rhinoandroidall(MavenPublication) {
+            artifactId = 'rhino-android-all'
+            artifact tasks.shadowJarAndroid.archiveFile.map { it.get() }
+            artifact sourceJar
+            artifact javadocJar
+            
+            pom.withXml {
+                def root = asNode()
+
+                root.appendNode('name', 'rhino-android-all')
+                root.appendNode('description', "Rhino JavaScript all-in-one JAR for Android (no terminal tools, Java 11 bytecode)")
                 root.appendNode("url", "https://mozilla.github.io/rhino/")
 
                 def p = root.appendNode("parent")

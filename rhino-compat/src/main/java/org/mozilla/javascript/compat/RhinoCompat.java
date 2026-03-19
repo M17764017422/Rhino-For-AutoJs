@@ -63,7 +63,10 @@ public final class RhinoCompat {
             }
 
             // 初始化标准对象
-            ScriptableObject.initStandardObjects(cx, scope, sealed);
+            // Rhino 2.0.0+: initStandardObjects 是 Context 的方法
+            if (scope instanceof ScriptableObject) {
+                cx.initStandardObjects((ScriptableObject) scope, sealed);
+            }
 
             // 初始化 E4X 支持
             E4XCompat.init(cx, scope, sealed);
@@ -115,8 +118,13 @@ public final class RhinoCompat {
      * @return 如果是生成器函数返回 true
      */
     public static boolean isGeneratorFunction(Object obj) {
-        if (obj instanceof BaseFunction) {
-            return ((BaseFunction) obj).isGeneratorFunction();
+        // Rhino 2.0.0+: JSFunction 通过 JSDescriptor 检测生成器
+        if (obj instanceof JSFunction) {
+            return ((JSFunction) obj).getDescriptor().isES6Generator();
+        }
+        // NativeFunction 的 isGeneratorFunction() 是 protected，需要子类实现
+        if (obj instanceof NativeFunctionAdapter) {
+            return ((NativeFunctionAdapter) obj).isGeneratorFunctionAdapter();
         }
         return false;
     }

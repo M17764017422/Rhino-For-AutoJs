@@ -10,8 +10,6 @@ package org.mozilla.javascript.compat;
 import org.mozilla.javascript.*;
 import org.mozilla.javascript.debug.DebuggableScript;
 
-import java.util.EnumSet;
-
 /**
  * JSFunction 到 NativeFunction 的适配器
  *
@@ -52,15 +50,18 @@ public final class NativeFunctionAdapter extends NativeFunction {
     private NativeFunctionAdapter(BaseFunction delegate) {
         this.delegate = delegate;
 
-        // 缓存属性
+        // 缓存属性 - 通过 JSDescriptor 访问（JSDescriptor 的方法是 public）
         if (delegate instanceof JSFunction) {
-            JSFunction jsfn = (JSFunction) delegate;
-            this.languageVersion = jsfn.getLanguageVersion();
-            this.strict = jsfn.isStrict();
+            JSDescriptor<?> desc = ((JSFunction) delegate).getDescriptor();
+            this.languageVersion = desc.getLanguageVersion();
+            this.strict = desc.isStrict();
         } else if (delegate instanceof NativeFunction) {
-            NativeFunction nfn = (NativeFunction) delegate;
-            this.languageVersion = nfn.getLanguageVersion();
-            this.strict = nfn.isStrict();
+            // NativeFunction 的 getLanguageVersion() 是 protected
+            // 子类可以访问，这里需要使用当前 Context 的版本
+            Context cx = Context.getCurrentContext();
+            this.languageVersion =
+                    (cx != null) ? cx.getLanguageVersion() : Context.VERSION_DEFAULT;
+            this.strict = false; // NativeFunction 没有 public 方法检测 strict
         } else {
             Context cx = Context.getCurrentContext();
             this.languageVersion =
@@ -189,9 +190,10 @@ public final class NativeFunctionAdapter extends NativeFunction {
 
     @Override
     protected int getParamAndVarCount() {
-        // 对于 JSFunction，从 descriptor 获取
+        // JSFunction 的 getParamAndVarCount() 是 protected
+        // 通过 JSDescriptor 访问（public 方法）
         if (delegate instanceof JSFunction) {
-            return ((JSFunction) delegate).getParamAndVarCount();
+            return ((JSFunction) delegate).getDescriptor().getParamAndVarCount();
         }
         return delegate.getLength();
     }
@@ -199,7 +201,7 @@ public final class NativeFunctionAdapter extends NativeFunction {
     @Override
     protected String getParamOrVarName(int index) {
         if (delegate instanceof JSFunction) {
-            return ((JSFunction) delegate).getParamOrVarName(index);
+            return ((JSFunction) delegate).getDescriptor().getParamOrVarName(index);
         }
         // 降级：返回索引作为名称
         return "arg" + index;
@@ -208,7 +210,7 @@ public final class NativeFunctionAdapter extends NativeFunction {
     @Override
     protected boolean getParamOrVarConst(int index) {
         if (delegate instanceof JSFunction) {
-            return ((JSFunction) delegate).getParamOrVarConst(index);
+            return ((JSFunction) delegate).getDescriptor().getParamOrVarConst(index);
         }
         return false;
     }
@@ -218,11 +220,42 @@ public final class NativeFunctionAdapter extends NativeFunction {
         return strict;
     }
 
+    /**
+     * 检查是否为生成器函数（供 RhinoCompat 使用）
+     *
+     * @return 如果是生成器函数返回 true
+     */
+    boolean isGeneratorFunctionAdapter() {
+        if (delegate instanceof JSFunction) {
+            return ((JSFunction) delegate).getDescriptor().isES6Generator();
+        }
+        return false;
+    }
+
     // ========== 其他方法 ==========
 
-    @Override
-    String decompile(int indent, EnumSet<DecompilerFlag> flags) {
-        return delegate.decompile(indent, flags);
+    /**
+     * 反编译函数源码
+     *
+     * <p>Rhino 2.0.0+ 中 BaseFunction.decompile() 是包私有的， 使用 Context.decompileFunction() 或 getRawSource() 替代
+     *
+     * <p>注意：此方法不能覆盖父类的包私有方法，仅作为辅助方法提供
+     *
+     * @param indent 缩进
+     * @return 源码字符串
+     */
+    public String getDecompiledSource(int indent) {
+        // 优先使用 getRawSource()
+        String rawSource = getRawSource();
+        if (rawSource != null) {
+            return rawSource;
+        }
+        // 降级：使用 Context.decompileFunction
+        Context cx = Context.getCurrentContext();
+        if (cx != null) {
+            return cx.decompileFunction(this, indent);
+        }
+        return "function " + getFunctionName() + "() { [native code] }";
     }
 
     @Override

@@ -10,7 +10,7 @@ package org.mozilla.javascript.compat;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.xml.XMLLib;
-import org.mozilla.javascript.xml.XMLLibImpl;
+import org.mozilla.javascript.xmlimpl.XMLLibImpl;
 
 /**
  * E4X 兼容层
