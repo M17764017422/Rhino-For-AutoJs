@@ -1,3 +1,5 @@
+import com.gradleup.shadow.ShadowJar
+
 plugins {
     id 'rhino.library-conventions'
     id 'com.gradleup.shadow' version '9.3.2'
@@ -44,7 +46,7 @@ shadowJar {
 // ========== Android JAR (rhino-android-all-*.jar) ==========
 // 不包含 JLine 终端工具，适用于 Android 项目
 
-tasks.register('shadowJarAndroid', com.gradleup.shadow.ShadowJar) {
+tasks.register('shadowJarAndroid', ShadowJar) {
     description = 'Create Android-optimized all-in-one JAR without terminal tools'
     group = 'build'
     
