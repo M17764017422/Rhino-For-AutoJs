@@ -1,0 +1,55 @@
+plugins {
+    id 'rhino.library-conventions'
+}
+
+dependencies {
+    implementation project(':rhino')
+    implementation project(':rhino-xml')
+    testImplementation project(':testutils')
+}
+
+decycle {
+    // 允许 compat 包引用 rhino 核心包
+    // 这是单向依赖：rhino-compat → rhino，不构成循环
+    ignoring from: "org.mozilla.javascript.compat.**", to: "org.mozilla.javascript.**"
+}
+
+publishing {
+    publications {
+        rhinocompat(MavenPublication) {
+            from components.java
+            artifacts = [jar, sourceJar, javadocJar]
+            pom.withXml {
+                def root = asNode()
+
+                root.appendNode('name', 'rhino-compat')
+                root.appendNode('description', 
+                    'Rhino compatibility layer for downstream projects migrating from 1.x to 2.x')
+                root.appendNode("url", "https://mozilla.github.io/rhino/")
+
+                def p = root.appendNode("parent")
+                p.appendNode("groupId", "org.sonatype.oss")
+                p.appendNode("artifactId", "oss-parent")
+                p.appendNode("version", "7")
+
+                def l = root.appendNode("licenses").appendNode("license")
+                l.appendNode("name", "Mozilla Public License, Version 2.0")
+                l.appendNode("url", "http://www.mozilla.org/MPL/2.0/index.txt")
+
+                def scm = root.appendNode("scm")
+                scm.appendNode("connection", "scm:git:git@github.com:mozilla/rhino.git")
+                scm.appendNode("developerConnection", "scm:git:git@github.com:mozilla/rhino.git")
+                scm.appendNode("url", "git@github.com:mozilla/rhino.git")
+
+                def o = root.appendNode("organization")
+                o.appendNode("name", "The Mozilla Foundation")
+                o.appendNode("url", "http://www.mozilla.org")
+
+                def d = root.appendNode("developers")
+                def dd = d.appendNode("developer")
+                dd.appendNode("name", "Rhino Community")
+                dd.appendNode("email", "rhino-dev@mozilla.org")
+            }
+        }
+    }
+}

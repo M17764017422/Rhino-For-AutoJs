@@ -50,3 +50,49 @@ methods, shared between compiled classes and interpreter.
 Builtins such as `Object` or `Array` are implemented in
 [NativeObject](rhino/src/main/java/org/mozilla/javascript/NativeObject.java),
 [NativeArray](rhino/src/main/java/org/mozilla/javascript/NativeArray.java), etc.
+
+## Branch Management
+
+This repository maintains 3 branches for different purposes:
+
+| Branch | Tracks | Purpose |
+|--------|--------|---------|
+| `main` | `origin/main` | Primary branch with Android compatibility fixes + latest mozilla features |
+| `autojs6` | `autojs6/master` | AutoJs6 version (SuperMonster003/Rhino-For-AutoJs6) |
+| `mozilla` | `official/master` | Mozilla official rhino (mozilla/rhino) |
+
+### Remote Repositories
+
+| Remote | URL |
+|--------|-----|
+| `origin` | https://github.com/M17764017422/Rhino-For-AutoJs |
+| `autojs6` | https://github.com/SuperMonster003/Rhino-For-AutoJs6 |
+| `official` | https://github.com/mozilla/rhino |
+
+### Sync Commands
+
+```powershell
+# Sync autojs6 branch (fast-forward)
+git checkout autojs6
+git fetch autojs6
+git merge autojs6/master --ff-only
+git push origin autojs6
+
+# Sync mozilla branch (merge)
+git checkout mozilla
+git fetch official
+git merge official/master --no-ff
+git push origin mozilla
+
+# Update main branch (merge mozilla changes)
+git checkout main
+git merge mozilla --no-ff
+git push origin main
+```
+
+### Main Branch Features
+
+The `main` branch includes:
+- Android D8 compatibility fixes (JLine FFM exclusion, META-INF services handling)
+- AutoJs6 compatibility features
+- Latest mozilla/rhino updates

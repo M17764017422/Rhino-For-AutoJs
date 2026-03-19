@@ -7,6 +7,7 @@ dependencies {
     implementation project(':rhino')
     implementation project(':rhino-tools')
     implementation project(':rhino-xml')
+    implementation project(':rhino-compat')
     // Include JLine so that the stand-alone JAR gets a nice terminal
     runtimeOnly libs.jline.terminal
     runtimeOnly libs.jline.reader
@@ -35,8 +36,6 @@ shadowJar {
     exclude 'META-INF/services/org/jline/terminal/provider/ffm'
     // Exclude JLine service directory entries (empty directories cause D8 NullPointerException)
     exclude 'META-INF/services/org/jline/**'
-    // Exclude empty META-INF/services/ directory after removing JLine services
-    exclude 'META-INF/services/'
 }
 
 publishing {
