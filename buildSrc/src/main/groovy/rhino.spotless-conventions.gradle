@@ -13,6 +13,9 @@ spotless {
     if (JavaVersion.current() >= JavaVersion.VERSION_17) {
         java {
             googleJavaFormat('1.33.0').aosp()
+            // Suppress lint errors that occur due to google-java-format internal API issues
+            // This can happen when running on older JDK versions that don't have all required classes
+            suppressLintsFor 'google-java-format:NoClassDefFoundError'
         }
     } else {
         System.out.println("Not running Spotless: Java language version is " + JavaVersion.current())
