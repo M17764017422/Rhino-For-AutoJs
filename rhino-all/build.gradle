@@ -1,5 +1,3 @@
-import com.gradleup.shadow.ShadowJar
-
 plugins {
     id 'rhino.library-conventions'
     id 'com.gradleup.shadow' version '9.3.2'
@@ -45,8 +43,9 @@ shadowJar {
 
 // ========== Android JAR (rhino-android-all-*.jar) ==========
 // 不包含 JLine 终端工具，适用于 Android 项目
+// 使用标准 Jar 任务合并依赖（避免在 Groovy DSL 中引用插件类）
 
-tasks.register('shadowJarAndroid', ShadowJar) {
+tasks.register('shadowJarAndroid', Jar) {
     description = 'Create Android-optimized all-in-one JAR without terminal tools'
     group = 'build'
     
@@ -55,10 +54,15 @@ tasks.register('shadowJarAndroid', ShadowJar) {
     archiveClassifier.set('')
     archiveVersion.set(project.version.toString())
     
-    // 包含所有模块（不含 JLine）
-    from(project.configurations.runtimeClasspath.collect { 
-        it.isDirectory() ? it : zipTree(it) 
+    // 包含所有运行时依赖（排除 JLine）
+    from({
+        configurations.runtimeClasspath.collect { 
+            it.isDirectory() ? it : zipTree(it) 
+        }
     }) {
+        exclude 'META-INF/*.SF'
+        exclude 'META-INF/*.DSA'
+        exclude 'META-INF/*.RSA'
         // 排除 JLine 相关类
         exclude 'org/jline/**'
         exclude 'META-INF/maven/org.jline/**'
@@ -68,16 +72,10 @@ tasks.register('shadowJarAndroid', ShadowJar) {
     }
     
     // 包含本模块编译输出
-    with(project.tasks.jar.archiveFile.map { 
-        zipTree(it.get()) 
-    })
+    with jar
     
-    // Merge service files
+    // 处理重复文件
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
-    mergeServiceFiles()
-    filesNotMatching('META-INF/services/**') {
-        duplicatesStrategy = DuplicatesStrategy.WARN
-    }
     
     // Android 不需要 Main-Class
     manifest {
@@ -86,6 +84,38 @@ tasks.register('shadowJarAndroid', ShadowJar) {
             'Implementation-Version': project.version,
             'Built-For': 'Android (Java 11 bytecode, no terminal tools)'
         )
+    }
+    
+    // 手动合并 META-INF/services 文件
+    // 使用 doFirst 在执行阶段处理
+    doFirst {
+        def servicesDir = temporaryDir.toPath().resolve('META-INF/services')
+        java.nio.file.Files.createDirectories(servicesDir)
+        
+        configurations.runtimeClasspath.each { dep ->
+            if (dep.name.endsWith('.jar')) {
+                zipTree(dep).matching { 
+                    include 'META-INF/services/*' 
+                    exclude 'META-INF/services/org.jline*'
+                }.each { file ->
+                    def serviceName = file.name
+                    def targetFile = servicesDir.resolve(serviceName).toFile()
+                    if (targetFile.exists()) {
+                        file.eachLine { line ->
+                            if (!targetFile.text.contains(line)) {
+                                targetFile << line + '\n'
+                            }
+                        }
+                    } else {
+                        targetFile << file.text
+                    }
+                }
+            }
+        }
+        
+        from(temporaryDir) {
+            include 'META-INF/services/*'
+        }
     }
 }
 
