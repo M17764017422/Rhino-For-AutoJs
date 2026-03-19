@@ -41,20 +41,20 @@ jobs:
     - name: Build rhino core (for Android)
       run: ./gradlew :rhino:jar --no-configuration-cache
       
-    - name: Build rhino-all (for Desktop)
-      run: ./gradlew :rhino-all:shadowJar --no-configuration-cache
-      
     - name: Build rhino-android-all (for Android, no JLine)
       run: ./gradlew :rhino-all:shadowJarAndroid --no-configuration-cache
+      
+    - name: Build rhino-all (for Desktop)
+      run: ./gradlew :rhino-all:shadowJar --no-configuration-cache
       
     - name: List built JARs
       run: |
         echo "=== Rhino Core (Android compatible) ==="
         ls -la rhino/build/libs/
-        echo "=== Rhino All (Desktop, includes JLine) ==="
-        ls -la rhino-all/build/libs/
         echo "=== Rhino Android All (no JLine, optimized for Android) ==="
         ls -la rhino-all/build/libs/rhino-android-all-*.jar || echo "Not found"
+        echo "=== Rhino All (Desktop, includes JLine) ==="
+        ls -la rhino-all/build/libs/rhino-all-*.jar
       
     - name: Upload rhino core JAR artifact
       uses: actions/upload-artifact@v4
@@ -63,18 +63,18 @@ jobs:
         path: rhino/build/libs/rhino-*.jar
         retention-days: 30
         
-    - name: Upload rhino-all JAR artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: rhino-all
-        path: rhino-all/build/libs/rhino-all-*.jar
-        retention-days: 30
-        
     - name: Upload rhino-android-all JAR artifact
       uses: actions/upload-artifact@v4
       with:
         name: rhino-android-all
         path: rhino-all/build/libs/rhino-android-all-*.jar
+        retention-days: 30
+        
+    - name: Upload rhino-all JAR artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: rhino-all
+        path: rhino-all/build/libs/rhino-all-*.jar
         retention-days: 30
 
   publish-github-packages:
