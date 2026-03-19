@@ -140,6 +140,7 @@ publishing {
         
         rhinoandroidall(MavenPublication) {
             artifactId = 'rhino-android-all'
+            // 使用 outputs.files.singleFile 引用输出文件
             artifact tasks.shadowJarAndroid.outputs.files.singleFile
             artifact sourceJar
             artifact javadocJar
@@ -176,4 +177,9 @@ publishing {
             }
         }
     }
+}
+
+// 显式确保 publish 任务依赖 shadowJarAndroid
+tasks.matching { it.name == 'publishRhinoandroidallPublicationToMavenRepository' }.configureEach {
+    dependsOn tasks.shadowJarAndroid
 }
