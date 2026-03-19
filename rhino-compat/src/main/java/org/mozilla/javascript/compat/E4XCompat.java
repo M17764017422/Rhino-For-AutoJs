@@ -16,8 +16,8 @@ import org.mozilla.javascript.xmlimpl.XMLLibImpl;
  *
  * <p>自动检测并使用正确的 E4X 初始化方式。
  *
- * <p><b>注意</b>：Rhino 2.0.0+ 已统一使用 XMLLibImpl.init() 静态方法初始化，
- * 不再需要检测 ClassDescriptor API（仅 Rhino 1.7.x 需要区分处理）。
+ * <p><b>注意</b>：Rhino 2.0.0+ 已统一使用 XMLLibImpl.init() 静态方法初始化，不再需要检测 ClassDescriptor
+ * API（仅 Rhino 1.7.x 需要区分处理）。
  *
  * @since 2.0.0
  */

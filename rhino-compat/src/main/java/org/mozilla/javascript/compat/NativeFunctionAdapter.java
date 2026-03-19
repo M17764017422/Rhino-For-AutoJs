@@ -44,9 +44,7 @@ public final class NativeFunctionAdapter extends NativeFunction {
     /** 是否为严格模式 */
     private final boolean strict;
 
-    /**
-     * 私有构造函数
-     */
+    /** 私有构造函数 */
     private NativeFunctionAdapter(BaseFunction delegate) {
         this.delegate = delegate;
 
@@ -59,13 +57,11 @@ public final class NativeFunctionAdapter extends NativeFunction {
             // NativeFunction 的 getLanguageVersion() 是 protected
             // 子类可以访问，这里需要使用当前 Context 的版本
             Context cx = Context.getCurrentContext();
-            this.languageVersion =
-                    (cx != null) ? cx.getLanguageVersion() : Context.VERSION_DEFAULT;
+            this.languageVersion = (cx != null) ? cx.getLanguageVersion() : Context.VERSION_DEFAULT;
             this.strict = false; // NativeFunction 没有 public 方法检测 strict
         } else {
             Context cx = Context.getCurrentContext();
-            this.languageVersion =
-                    (cx != null) ? cx.getLanguageVersion() : Context.VERSION_DEFAULT;
+            this.languageVersion = (cx != null) ? cx.getLanguageVersion() : Context.VERSION_DEFAULT;
             this.strict = false;
         }
     }
