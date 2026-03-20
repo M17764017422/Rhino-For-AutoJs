@@ -103,16 +103,12 @@ public final class RhinoCompat {
         }
     }
 
-    /**
-     * 检查是否已初始化
-     */
+    /** 检查是否已初始化 */
     public static boolean isInitialized() {
         return initialized;
     }
 
-    /**
-     * 重置状态（仅用于测试）
-     */
+    /** 重置状态（仅用于测试） */
     public static void reset() {
         initialized = false;
     }
@@ -120,45 +116,52 @@ public final class RhinoCompat {
     // ========== Java.extend 注入 ==========
 
     private static void injectJavaExtend(Context cx, Scriptable scope) {
-        var extendFunc = new LambdaFunction(
-                scope,
-                "extend",
-                2,
-                (SerializableCallable) (context, s, thisObj, args) -> {
-                    if (args.length < 2) {
-                        throw ScriptRuntime.typeErrorById("msg.function.arg1", "Java.extend");
-                    }
+        var extendFunc =
+                new LambdaFunction(
+                        scope,
+                        "extend",
+                        2,
+                        (SerializableCallable)
+                                (context, s, thisObj, args) -> {
+                                    if (args.length < 2) {
+                                        throw ScriptRuntime.typeErrorById(
+                                                "msg.function.arg1", "Java.extend");
+                                    }
 
-                    // 解析参数：Class(es) + implementation
-                    var classCount = 0;
-                    for (int i = 0; i < args.length - 1; i++) {
-                        if (args[i] instanceof NativeJavaClass || args[i] instanceof Class) {
-                            classCount++;
-                        } else {
-                            break;
-                        }
-                    }
+                                    // 解析参数：Class(es) + implementation
+                                    var classCount = 0;
+                                    for (int i = 0; i < args.length - 1; i++) {
+                                        if (args[i] instanceof NativeJavaClass
+                                                || args[i] instanceof Class) {
+                                            classCount++;
+                                        } else {
+                                            break;
+                                        }
+                                    }
 
-                    // 收集类
-                    Class<?>[] classes = new Class<?>[classCount];
-                    for (int i = 0; i < classCount; i++) {
-                        if (args[i] instanceof NativeJavaClass) {
-                            classes[i] = ((NativeJavaClass) args[i]).getClassObject();
-                        } else if (args[i] instanceof Class) {
-                            classes[i] = (Class<?>) args[i];
-                        }
-                    }
+                                    // 收集类
+                                    Class<?>[] classes = new Class<?>[classCount];
+                                    for (int i = 0; i < classCount; i++) {
+                                        if (args[i] instanceof NativeJavaClass) {
+                                            classes[i] =
+                                                    ((NativeJavaClass) args[i]).getClassObject();
+                                        } else if (args[i] instanceof Class) {
+                                            classes[i] = (Class<?>) args[i];
+                                        }
+                                    }
 
-                    // 实现对象
-                    Scriptable impl = ScriptableObject.ensureScriptable(args[classCount]);
+                                    // 实现对象
+                                    Scriptable impl =
+                                            ScriptableObject.ensureScriptable(args[classCount]);
 
-                    // 调用 JavaExtendCompat
-                    if (classCount == 1) {
-                        return JavaExtendCompat.extend(context, s, classes[0], impl);
-                    } else {
-                        return JavaExtendCompat.extend(context, s, classes, impl);
-                    }
-                });
+                                    // 调用 JavaExtendCompat
+                                    if (classCount == 1) {
+                                        return JavaExtendCompat.extend(
+                                                context, s, classes[0], impl);
+                                    } else {
+                                        return JavaExtendCompat.extend(context, s, classes, impl);
+                                    }
+                                });
 
         // 注入全局函数: extend(...)
         ScriptableObject.defineProperty(scope, "extend", extendFunc, ScriptableObject.DONTENUM);
@@ -167,39 +170,33 @@ public final class RhinoCompat {
         var Java = ScriptableObject.getProperty(scope, "Java");
         if (Java == Scriptable.NOT_FOUND) {
             var javaObj = cx.newObject(scope);
-            ScriptableObject.defineProperty(javaObj, "extend", extendFunc, ScriptableObject.DONTENUM);
+            ScriptableObject.defineProperty(
+                    javaObj, "extend", extendFunc, ScriptableObject.DONTENUM);
             ScriptableObject.defineProperty(scope, "Java", javaObj, ScriptableObject.DONTENUM);
         } else if (Java instanceof Scriptable) {
-            ScriptableObject.defineProperty((Scriptable) Java, "extend", extendFunc, ScriptableObject.DONTENUM);
+            ScriptableObject.defineProperty(
+                    (Scriptable) Java, "extend", extendFunc, ScriptableObject.DONTENUM);
         }
     }
 
     // ========== 函数类型检查 ==========
 
-    /**
-     * 检查对象是否为 JavaScript 函数
-     */
+    /** 检查对象是否为 JavaScript 函数 */
     public static boolean isFunction(Object obj) {
         return obj instanceof BaseFunction;
     }
 
-    /**
-     * 检查对象是否可调用
-     */
+    /** 检查对象是否可调用 */
     public static boolean isCallable(Object obj) {
         return obj instanceof Callable;
     }
 
-    /**
-     * 检查是否为箭头函数
-     */
+    /** 检查是否为箭头函数 */
     public static boolean isArrowFunction(Object obj) {
         return FunctionCompat.isArrowFunction(obj);
     }
 
-    /**
-     * 检查是否为生成器函数
-     */
+    /** 检查是否为生成器函数 */
     public static boolean isGeneratorFunction(Object obj) {
         if (obj instanceof JSFunction) {
             return ((JSFunction) obj).getDescriptor().isES6Generator();
@@ -210,18 +207,14 @@ public final class RhinoCompat {
         return false;
     }
 
-    /**
-     * 检查是否为绑定函数
-     */
+    /** 检查是否为绑定函数 */
     public static boolean isBoundFunction(Object obj) {
         return obj instanceof BoundFunction;
     }
 
     // ========== 函数调用 ==========
 
-    /**
-     * 安全调用函数
-     */
+    /** 安全调用函数 */
     public static Object call(
             Object fn, Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
         if (fn instanceof Callable) {
@@ -230,9 +223,7 @@ public final class RhinoCompat {
         throw ScriptRuntime.notFunctionError(fn);
     }
 
-    /**
-     * 构造对象
-     */
+    /** 构造对象 */
     public static Scriptable construct(Object fn, Context cx, Scriptable scope, Object[] args) {
         if (fn instanceof Function) {
             return ((Function) fn).construct(cx, scope, args);
@@ -242,32 +233,24 @@ public final class RhinoCompat {
 
     // ========== 函数信息 ==========
 
-    /**
-     * 获取函数参数个数
-     */
+    /** 获取函数参数个数 */
     public static int getParamCount(Object fn) {
         return FunctionCompat.getParamCount(fn);
     }
 
-    /**
-     * 获取函数名
-     */
+    /** 获取函数名 */
     public static String getFunctionName(Object fn) {
         return FunctionCompat.getFunctionName(fn);
     }
 
     // ========== 类型转换 ==========
 
-    /**
-     * 包装函数为兼容类型
-     */
+    /** 包装函数为兼容类型 */
     public static Object wrapFunction(Object fn) {
         return NativeFunctionAdapter.wrap(fn);
     }
 
-    /**
-     * 解包函数对象
-     */
+    /** 解包函数对象 */
     public static Object unwrapFunction(Object fn) {
         return NativeFunctionAdapter.unwrap(fn);
     }

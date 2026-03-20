@@ -10,12 +10,19 @@ spotless {
     // There is no version of googleJavaFormat that works for Java 11 and 17,
     // and different versions format differently.
     // google-java-format 1.33.0 requires JDK 22+ (uses JCTree$JCAnyPattern)
-    // google-java-format 1.17.0 works with JDK 17+
-    if (JavaVersion.current() >= JavaVersion.VERSION_17) {
+    // google-java-format 1.17.0 works with JDK 17-21
+    def currentJvm = JavaVersion.current()
+    if (currentJvm >= JavaVersion.VERSION_22) {
+        // JDK 22+: use google-java-format 1.33.0
+        java {
+            googleJavaFormat('1.33.0').aosp()
+        }
+    } else if (currentJvm >= JavaVersion.VERSION_17) {
+        // JDK 17-21: use google-java-format 1.17.0
         java {
             googleJavaFormat('1.17.0').aosp()
         }
     } else {
-        System.out.println("Not running Spotless: Java language version is " + JavaVersion.current())
+        System.out.println("Not running Spotless: Java language version is " + currentJvm)
     }
 }

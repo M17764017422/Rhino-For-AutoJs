@@ -50,8 +50,9 @@ public final class JavaExtendCompat {
     static {
         Method m = null;
         try {
-            m = JavaAdapter.class.getDeclaredMethod(
-                    "js_createAdapter", Context.class, Scriptable.class, Object[].class);
+            m =
+                    JavaAdapter.class.getDeclaredMethod(
+                            "js_createAdapter", Context.class, Scriptable.class, Object[].class);
             m.setAccessible(true);
         } catch (NoSuchMethodException e) {
             // Should not happen in Rhino 2.0.0+
