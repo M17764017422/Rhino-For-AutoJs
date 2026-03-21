@@ -6,7 +6,7 @@ import org.junit.Test;
 import org.mozilla.javascript.testutils.Utils;
 
 public class ThreadSafeScriptableObjectTest {
-    @Test(timeout = 30000)  // 30秒超时，避免死锁导致 CI 卡住
+    @Test(timeout = 30000) // 30秒超时，避免死锁导致 CI 卡住
     public void canSealGlobalObjectWithoutDeadlock() {
         ContextFactory.getGlobalSetter()
                 .setContextFactoryGlobal(
