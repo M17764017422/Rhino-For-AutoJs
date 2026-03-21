@@ -40,43 +40,73 @@ tasks.withType(JavaCompile).configureEach {
           " ErrorProne checks disabled (requires JDK 17+)");
         options.errorprone.enabled = false;
     } else {
-        // Disable tests that we aren't ready for in ErrorProne.
-        options.errorprone.disable(
-                // Things we should fix as we increase Java versions
-                "ClassInitializationDeadlock",
-                "EffectivelyPrivate",
-                "BooleanLiteral",
-                "AssignmentExpression",
-                "DuplicateBranches",
-                "PatternMatchingInstanceof",
-                "RedundantControlFlow",
-                // JavaDoc stuff -- not going to fix unless we do a big JavaDoc update
-                "AlmostJavadoc",
-                "EmptyBlockTag",
-                "EscapedEntity",
-                "MissingSummary",
-                "InvalidBlockTag",
-                "NotJavadoc",
-                "UnicodeEscape",
-                // Stuff that we just love to do but should do less of eventually
-                "EmptyCatch",
-                "LabelledBreakTarget",
-                "JavaUtilDate",
-                // Less important for now, more stylistic than bug
-                "InlineMeSuggester",
-                // This one either alerts for parameters that we don't use,
-                // or spuriously for local variables in my opinion.
-                "UnusedVariable",
-                // This requires annotations that are difficult to incorporate
-                // without adding a dependency for everyon who uses Rhino.
-                "AnnotateFormatMethod"
-        )
+        // Current ErrorProne version
+        def errorProneVersion = "2.23.0"
+        
+        // Checkers that were introduced in later versions: [name, introducedVersion]
+        def versionSpecificCheckers = [
+            ["ClassInitializationDeadlock", "2.27.0"],
+            ["PatternMatchingInstanceof", "2.28.0"],
+            ["RedundantControlFlow", "2.36.0"],
+            ["DuplicateBranches", "2.36.0"],
+            ["AssignmentExpression", "2.37.0"],
+            ["BooleanLiteral", "2.39.0"],
+            ["EffectivelyPrivate", "2.41.0"],
+        ]
+        
+        // Common checkers available in all versions
+        def commonCheckers = [
+            // JavaDoc stuff -- not going to fix unless we do a big JavaDoc update
+            "AlmostJavadoc",
+            "EmptyBlockTag",
+            "EscapedEntity",
+            "MissingSummary",
+            "InvalidBlockTag",
+            "NotJavadoc",
+            "UnicodeEscape",
+            // Stuff that we just love to do but should do less of eventually
+            "EmptyCatch",
+            "LabelledBreakTarget",
+            "JavaUtilDate",
+            // Less important for now, more stylistic than bug
+            "InlineMeSuggester",
+            // This one either alerts for parameters that we don't use,
+            // or spuriously for local variables in my opinion.
+            "UnusedVariable",
+            // This requires annotations that are difficult to incorporate
+            // without adding a dependency for everyone who uses Rhino.
+            "AnnotateFormatMethod"
+        ]
+        
+        // Build list of checkers to disable based on version
+        def checkersToDisable = new ArrayList<String>(commonCheckers)
+        
+        versionSpecificCheckers.each { entry ->
+            if (compareVersions(errorProneVersion, entry[1]) >= 0) {
+                checkersToDisable.add(entry[0])
+            }
+        }
+        
+        options.errorprone.disable(checkersToDisable.toArray(new String[0]))
         options.errorprone.enable(
                 // These two do the last thing that Checkstyle used to do for us
                 "RemoveUnusedImports",
                 "WildcardImport")
         options.errorprone.excludedPaths = '.+/src/test/java/.+'
     }
+}
+
+// Helper function to compare semantic versions
+def compareVersions(String v1, String v2) {
+    def parts1 = v1.split('\\.').collect { it.toInteger() }
+    def parts2 = v2.split('\\.').collect { it.toInteger() }
+    def maxLen = Math.max(parts1.size(), parts2.size())
+    for (int i = 0; i < maxLen; i++) {
+        def p1 = i < parts1.size() ? parts1[i] : 0
+        def p2 = i < parts2.size() ? parts2[i] : 0
+        if (p1 != p2) return p1 <=> p2
+    }
+    return 0
 }
 
 tasks.withType(Javadoc) {
