@@ -50,6 +50,32 @@ tasks.withType(Test).configureEach {
     systemProperty 'user.country', 'US'
     systemProperty 'user.timezone', 'America/Los_Angeles'
     systemProperty 'file.encoding', 'UTF-8'
+
+    // Set timeout for each test class (10 minutes max) to prevent hanging tests
+    timeout = java.time.Duration.ofMinutes(10)
+
+    // Output test progress to help diagnose hanging tests
+    beforeTest { descriptor ->
+        logger.lifecycle("Running test: ${descriptor.className}.${descriptor.name}")
+    }
+
+    // Output result for failed tests
+    afterTest { descriptor, result ->
+        if (result.resultType == org.gradle.api.tasks.testing.TestResult.ResultType.FAILURE) {
+            logger.lifecycle("FAILED: ${descriptor.className}.${descriptor.name} - ${result.exception?.message}")
+        }
+    }
+
+    // Configure detailed test logging
+    testLogging {
+        events "started", "passed", "skipped", "failed"
+        showExceptions true
+        showCauses true
+        showStackTraces true
+        exceptionFormat "full"
+        // Show standard output and error during test execution
+        showStandardStreams = true
+    }
 }
 
 test {
