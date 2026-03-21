@@ -51,30 +51,33 @@ class XmlProcessor implements Serializable {
         // create TF and set settings to secure it from XSLT attacks if given a malicious node in
         // toXMLString
         this.xform = javax.xml.transform.TransformerFactory.newInstance();
-        // Context ctx = Context.getCurrentContext();
-        // if (ctx == null || ctx.hasFeature(Context.FEATURE_ENABLE_XML_SECURE_PARSING)) {
-        // @Commented by SuperMonster003 at Nov 27, 2021
-        // configureSecureDBF(this.dom);
-        // configureSecureTF(this.xform);
-        // }
+        Context ctx = Context.getCurrentContext();
+        if (ctx == null || ctx.hasFeature(Context.FEATURE_ENABLE_XML_SECURE_PARSING)) {
+            configureSecureDBF(this.dom);
+            configureSecureTF(this.xform);
+        }
         int poolSize = Runtime.getRuntime().availableProcessors() * 2;
         this.documentBuilderPool = new LinkedBlockingDeque<DocumentBuilder>(poolSize);
     }
 
     /*
-     * Secure implementation of a DocumentBuilderFactory to prevent XXE and SSRF attacks
+     * Secure implementation of a DocumentBuilderFactory to prevent XXE and SSRF attacks.
+     * On platforms that do not support FEATURE_SECURE_PROCESSING (e.g., Android),
+     * this method silently returns without configuring any security features.
      */
     @SuppressWarnings("unused")
     private void configureSecureDBF(DocumentBuilderFactory dbf) {
         try {
             // This feature is required to be supported by all DocumentBuilderFactories.
+            // However, Android does not support this feature, so we catch and return.
             dbf.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
             // Disallow XIncludeAware as it is an SSRF target using xi:include.
             // This should also be supported on all XML processors.
             dbf.setXIncludeAware(false);
         } catch (ParserConfigurationException e) {
-            throw new RuntimeException(
-                    "XML parser (DocumentBuilderFactory) cannot be securely configured.", e);
+            // Platform does not support FEATURE_SECURE_PROCESSING (e.g., Android)
+            // Silently return without configuring any security features
+            return;
         }
 
         // The rest of these features should be set for the best security by default.
@@ -100,17 +103,21 @@ class XmlProcessor implements Serializable {
     }
 
     /*
-     * Secure implementation of a TransformerFactory to prevent XXE and SSRF attacks
+     * Secure implementation of a TransformerFactory to prevent XXE and SSRF attacks.
+     * On platforms that do not support FEATURE_SECURE_PROCESSING (e.g., Android),
+     * this method silently returns without configuring any security features.
      */
     @SuppressWarnings("unused")
     private void configureSecureTF(javax.xml.transform.TransformerFactory xform) {
         try {
             // Disallow all XXEs and SSRF via external calls for DTDs or Stylesheets.
             // This feature is required to be supported by all TransformerFactory implementations.
+            // However, Android does not support this feature, so we catch and return.
             xform.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
         } catch (TransformerConfigurationException e) {
-            throw new RuntimeException(
-                    "XML parser (TransformerFactory) cannot be securely configured.", e);
+            // Platform does not support FEATURE_SECURE_PROCESSING (e.g., Android)
+            // Silently return without configuring any security features
+            return;
         }
 
         // These next parameters make extra-sure that we have a secure configuration,
@@ -160,12 +167,11 @@ class XmlProcessor implements Serializable {
         // create TF and set settings to secure it from XSLT attacks if given a malicious node in
         // toXMLString
         this.xform = javax.xml.transform.TransformerFactory.newInstance();
-        // Context ctx = Context.getCurrentContext();
-        // if (ctx == null || ctx.hasFeature(Context.FEATURE_ENABLE_XML_SECURE_PARSING)) {
-        // @Commented by SuperMonster003 at Nov 27, 2021
-        // configureSecureDBF(this.dom);
-        // configureSecureTF(this.xform);
-        // }
+        Context ctx = Context.getCurrentContext();
+        if (ctx == null || ctx.hasFeature(Context.FEATURE_ENABLE_XML_SECURE_PARSING)) {
+            configureSecureDBF(this.dom);
+            configureSecureTF(this.xform);
+        }
         int poolSize = Runtime.getRuntime().availableProcessors() * 2;
         this.documentBuilderPool = new LinkedBlockingDeque<DocumentBuilder>(poolSize);
     }
