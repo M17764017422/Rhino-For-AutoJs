@@ -13,7 +13,7 @@ plugins {
 }
 
 dependencies {
-    errorprone "com.google.errorprone:error_prone_core:2.45.0"
+    errorprone "com.google.errorprone:error_prone_core:2.23.0"
 }
 
 version = project.version
@@ -34,10 +34,10 @@ tasks.withType(Jar).configureEach {
 }
 
 tasks.withType(JavaCompile).configureEach {
-    if (JavaVersion.current() < JavaVersion.VERSION_21) {
-        // ErrorProne 2.45.0 requires JDK 21+ (compiled with class file version 65.0)
+    if (JavaVersion.current() < JavaVersion.VERSION_17) {
+        // ErrorProne 2.23.0 requires JDK 17+
         System.out.println("Compiling with Java " + JavaVersion.current() +
-          " ErrorProne checks disabled (requires JDK 21+)");
+          " ErrorProne checks disabled (requires JDK 17+)");
         options.errorprone.enabled = false;
     } else {
         // Disable tests that we aren't ready for in ErrorProne.

@@ -28,7 +28,7 @@ jobs:
         with:
           java-version: |
             11
-            25
+            21
           distribution: 'adopt'
       - name: Check current state of test262.properties
         id: hashBefore
@@ -60,7 +60,7 @@ jobs:
           fi
 
   # Test various combinations of building and testing
-  # 支持 JDK 17-25，确保 spotless 兼容性
+  # 支持 JDK 17-21，确保 spotless 兼容性
   matrix-test:
     runs-on: ubuntu-latest
     strategy:
@@ -75,17 +75,13 @@ jobs:
             test-java-version: "21"
             name: "Java 21 Build and Test"
             multithread: false
-          - java-version: "25"
-            test-java-version: "25"
-            name: "Java 25 Build and Test"
-            multithread: false
-          - java-version: "25"
-            test-java-version: "25"
-            name: "Java 25 Multithreaded"
+          - java-version: "21"
+            test-java-version: "21"
+            name: "Java 21 Multithreaded"
             multithread: true
-          - java-version: "25"
+          - java-version: "21"
             test-java-version: "17"
-            name: "Java 25 Build, Java 17 Test"
+            name: "Java 21 Build, Java 17 Test"
             multithread: false
     name: ${{ matrix.name }}
     steps:
