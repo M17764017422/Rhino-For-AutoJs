@@ -36,6 +36,7 @@ public class WrapFactoryCompatTest {
     public void testNoInfiniteLoop() {
         try (Context cx = Context.enter()) {
             TestWrapFactory factory = new TestWrapFactory();
+            factory.setJavaPrimitiveWrap(false);  // 禁用原始类型包装，使 String 直接返回
             cx.setWrapFactory(factory);
 
             Scriptable scope = cx.newObject(new ImporterTopLevel(cx));
