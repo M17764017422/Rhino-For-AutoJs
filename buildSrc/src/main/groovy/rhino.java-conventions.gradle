@@ -55,14 +55,15 @@ tasks.withType(Test).configureEach {
     timeout = java.time.Duration.ofMinutes(10)
 
     // Output test progress to help diagnose hanging tests
+    // Use println() instead of logger for configuration cache compatibility
     beforeTest { descriptor ->
-        logger.lifecycle("Running test: ${descriptor.className}.${descriptor.name}")
+        println("Running test: ${descriptor.className}.${descriptor.name}")
     }
 
     // Output result for failed tests
     afterTest { descriptor, result ->
         if (result.resultType == org.gradle.api.tasks.testing.TestResult.ResultType.FAILURE) {
-            logger.lifecycle("FAILED: ${descriptor.className}.${descriptor.name} - ${result.exception?.message}")
+            println("FAILED: ${descriptor.className}.${descriptor.name} - ${result.exception?.message}")
         }
     }
 
