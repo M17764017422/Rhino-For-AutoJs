@@ -13,10 +13,11 @@ env:
   GRADLE_OPTS: "--enable-native-access=ALL-UNNAMED"
 
 jobs:
-  # Fast unit tests - excludes Test262 for quick feedback (~3 min)
-  unit-tests:
+  # Build - compile check (~2 min)
+  build:
     runs-on: ubuntu-latest
-    name: Unit Tests
+    name: Build
+    timeout-minutes: 10
     steps:
       - name: Check out Rhino
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.2
@@ -25,14 +26,140 @@ jobs:
         with:
           java-version: '21'
           distribution: 'adopt'
-      - name: Run unit tests (excluding Test262)
-        run: ./gradlew :rhino:test :rhino-tools:test :rhino-compat:test :tests:testWithoutTest262
+      - name: Compile
+        run: ./gradlew compileJava compileTestJava
+      - name: Upload build cache
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            **/build
+          key: build-${{ github.sha }}
+
+  # Rhino core module tests (~2 min)
+  unit-rhino:
+    runs-on: ubuntu-latest
+    name: Rhino Module Tests
+    needs: build
+    timeout-minutes: 15
+    steps:
+      - name: Check out Rhino
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.2
+      - name: Set up Java
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          java-version: '21'
+          distribution: 'adopt'
+      - name: Restore build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            **/build
+          key: build-${{ github.sha }}
+      - name: Run rhino tests
+        run: ./gradlew :rhino:test
       - name: Upload results
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         if: ${{ always() }}
         with:
-          name: reports-unit-tests
-          path: '*/build/reports'
+          name: reports-rhino
+          path: 'rhino/build/reports'
+
+  # Rhino-tools module tests (~1 min)
+  unit-rhino-tools:
+    runs-on: ubuntu-latest
+    name: Rhino-Tools Module Tests
+    needs: build
+    timeout-minutes: 15
+    steps:
+      - name: Check out Rhino
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.2
+      - name: Set up Java
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          java-version: '21'
+          distribution: 'adopt'
+      - name: Restore build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            **/build
+          key: build-${{ github.sha }}
+      - name: Run rhino-tools tests
+        run: ./gradlew :rhino-tools:test
+      - name: Upload results
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: ${{ always() }}
+        with:
+          name: reports-rhino-tools
+          path: 'rhino-tools/build/reports'
+
+  # Rhino-compat module tests (~1 min)
+  unit-rhino-compat:
+    runs-on: ubuntu-latest
+    name: Rhino-Compat Module Tests
+    needs: build
+    timeout-minutes: 15
+    steps:
+      - name: Check out Rhino
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.2
+      - name: Set up Java
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          java-version: '21'
+          distribution: 'adopt'
+      - name: Restore build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            **/build
+          key: build-${{ github.sha }}
+      - name: Run rhino-compat tests
+        run: ./gradlew :rhino-compat:test
+      - name: Upload results
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: ${{ always() }}
+        with:
+          name: reports-rhino-compat
+          path: 'rhino-compat/build/reports'
+
+  # Tests module (excluding Test262) (~2 min)
+  unit-tests:
+    runs-on: ubuntu-latest
+    name: Tests Module (no Test262)
+    needs: build
+    timeout-minutes: 15
+    steps:
+      - name: Check out Rhino
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.2
+      - name: Set up Java
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          java-version: '21'
+          distribution: 'adopt'
+      - name: Restore build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            **/build
+          key: build-${{ github.sha }}
+      - name: Run tests (excluding Test262)
+        run: ./gradlew :tests:testWithoutTest262
+      - name: Upload results
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: ${{ always() }}
+        with:
+          name: reports-tests
+          path: 'tests/build/reports'
 
   # Test262 suite - runs independently with longer timeout (~12 min)
   test262:
@@ -83,7 +210,7 @@ jobs:
   # 支持 JDK 17-21，确保 spotless 兼容性
   matrix-test:
     runs-on: ubuntu-latest
-    needs: [unit-tests]
+    needs: [build]
     strategy:
       fail-fast: false
       matrix:
@@ -105,6 +232,7 @@ jobs:
             name: "Java 21 Build, Java 17 Test"
             multithread: false
     name: ${{ matrix.name }}
+    timeout-minutes: 15
     steps:
     - name: Check out Rhino
       uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.2
@@ -115,6 +243,14 @@ jobs:
           ${{ matrix.test-java-version }}
           ${{ matrix.java-version }}
         distribution: 'adopt'
+    - name: Restore build cache
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          **/build
+        key: build-${{ github.sha }}
     - name: Build and test ${{ matrix.name }} (excludes Test262)
       env:
         RHINO_TEST_JAVA_VERSION: ${{ matrix.test-java-version }}
