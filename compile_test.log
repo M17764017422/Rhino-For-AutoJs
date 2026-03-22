@@ -1,0 +1,38 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.4.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Calculating task graph as no cached configuration is available for tasks: :rhino-compat:compileTestJava
+> Task :buildSrc:extractPluginRequests UP-TO-DATE
+> Task :buildSrc:generatePluginAdapters UP-TO-DATE
+> Task :buildSrc:compileJava UP-TO-DATE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:compileGroovyPlugins UP-TO-DATE
+> Task :buildSrc:pluginDescriptors UP-TO-DATE
+> Task :buildSrc:processResources UP-TO-DATE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+
+> Configure project :it-android
+No Android SDK found. Skipping build
+
+> Task :rhino:processResources UP-TO-DATE
+> Task :rhino-compat:processResources NO-SOURCE
+> Task :rhino:compileJava UP-TO-DATE
+> Task :rhino:classes UP-TO-DATE
+> Task :rhino:jar UP-TO-DATE
+> Task :testutils:compileJava UP-TO-DATE
+> Task :rhino-xml:compileJava UP-TO-DATE
+> Task :rhino-compat:compileJava UP-TO-DATE
+> Task :rhino-compat:classes UP-TO-DATE
+> Task :rhino-compat:compileTestJava UP-TO-DATE
+
+[Incubating] Problems report is available at: file:///K:/msys64/home/ms900/Rhino-For-AutoJs/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.4.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 1m 17s
+14 actionable tasks: 14 up-to-date
+Configuration cache entry stored.

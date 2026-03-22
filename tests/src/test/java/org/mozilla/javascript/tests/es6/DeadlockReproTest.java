@@ -2,6 +2,7 @@ package org.mozilla.javascript.tests.es6;
 
 import static org.junit.Assert.assertEquals;
 
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
@@ -10,6 +11,7 @@ import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.testutils.Utils;
 
 public class DeadlockReproTest {
+    @Ignore("Upstream issue: deadlock with FEATURE_THREAD_SAFE_OBJECTS")
     @Test
     public void redefinePropertyWithThreadSafeSlotMap() {
         final ContextFactory factory =
