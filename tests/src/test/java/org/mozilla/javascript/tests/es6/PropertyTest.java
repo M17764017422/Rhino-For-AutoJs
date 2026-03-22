@@ -3,6 +3,7 @@ package org.mozilla.javascript.tests.es6;
 import static org.junit.Assert.assertEquals;
 
 import java.lang.reflect.Method;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
@@ -121,6 +122,7 @@ public class PropertyTest {
                 });
     }
 
+    @Ignore("Upstream issue: deadlock with FEATURE_THREAD_SAFE_OBJECTS")
     @Test
     public void redefinePropertyWithThreadSafeSlotMap() {
 

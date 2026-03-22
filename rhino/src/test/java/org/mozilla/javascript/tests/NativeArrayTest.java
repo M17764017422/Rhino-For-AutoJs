@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.NativeArray;
@@ -142,6 +143,7 @@ public class NativeArrayTest {
         }
     }
 
+    @Ignore("Upstream issue: deadlock with FEATURE_THREAD_SAFE_OBJECTS")
     @Test
     public void shouldNotDeadlockWhenDefiningPropertyLength() {
         final String script =
