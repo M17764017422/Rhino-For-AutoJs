@@ -78,3 +78,76 @@ jacocoTestReport {
         html.outputLocation = layout.buildDirectory.dir('reports/jacoco')
     }
 }
+
+// Task to run tests without Test262 (for faster CI feedback)
+tasks.register('testWithoutTest262', Test) {
+    description = 'Runs unit tests excluding Test262 suite'
+    group = 'verification'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    maxHeapSize = "1g"
+    forkEvery = 1
+    maxParallelForks = 64
+
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'mozilla.js.tests', 'testsrc/tests'
+    systemProperty 'mozilla.js.tests.timeout', 60000
+
+    jvmArgs += ['--add-opens', 'java.desktop/javax.swing.table=ALL-UNNAMED']
+    jvmArgs += ['--add-opens', 'java.base/java.util=ALL-UNNAMED']
+    jvmArgs += ['--add-opens', 'java.base/java.lang=ALL-UNNAMED']
+
+    // Exclude Test262 suite - these are run separately in CI
+    exclude '**/Test262SuiteTest.class'
+    exclude '**/perlstress**'
+    exclude '**/start_unicode**'
+    exclude '**/ojsc**'
+
+    System.properties.each { k, v ->
+        if (k.startsWith("rhino.")) {
+            systemProperty k, v
+        }
+    }
+}
+
+// Task to run only Test262 suite
+tasks.register('test262', Test) {
+    description = 'Runs only Test262 suite'
+    group = 'verification'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    maxHeapSize = "1g"
+    forkEvery = 1
+    maxParallelForks = 64
+
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'mozilla.js.tests', 'testsrc/tests'
+    systemProperty 'mozilla.js.tests.timeout', 60000
+
+    jvmArgs += ['--add-opens', 'java.desktop/javax.swing.table=ALL-UNNAMED']
+    jvmArgs += ['--add-opens', 'java.base/java.util=ALL-UNNAMED']
+    jvmArgs += ['--add-opens', 'java.base/java.lang=ALL-UNNAMED']
+
+    systemProperty 'test262properties', System.getProperty('test262properties')
+    if (System.getProperty('updateTest262properties') != null) {
+        if (System.getenv("RHINO_TEST_JAVA_VERSION") != "11") {
+            System.out.println("Test262 properties update is only accurate on Java 11 and you have " + JavaVersion.current())
+            System.out.println("Set RHINO_TEST_JAVA_VERSION in the environment to use this feature")
+            throw new Exception("Incorrect Java version for Test 262 properties update")
+        }
+        systemProperty 'updateTest262properties', System.getProperty('updateTest262properties')
+    }
+
+    // Include only Test262 suite
+    include '**/Test262SuiteTest.class'
+
+    System.properties.each { k, v ->
+        if (k.startsWith("rhino.")) {
+            systemProperty k, v
+        }
+    }
+}

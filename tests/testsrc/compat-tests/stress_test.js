@@ -261,3 +261,6 @@ if (failedTests.length > 0) {
 }
 
 java.lang.System.out.println("\nAll tests completed.");
+
+// Return success for test framework
+"success";

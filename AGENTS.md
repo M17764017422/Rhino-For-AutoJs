@@ -96,3 +96,72 @@ The `main` branch includes:
 - Android D8 compatibility fixes (JLine FFM exclusion, META-INF services handling)
 - AutoJs6 compatibility features
 - Latest mozilla/rhino updates
+
+## CI Optimization Plans
+
+### Current Implementation (Plan A)
+
+Tests are split into:
+- `unit-tests`: Fast unit tests (~3 min), excludes Test262
+- `test262`: Test262 suite independently (~12 min)
+- `matrix-test`: Multi-JDK verification without Test262
+
+Run locally:
+```bash
+./gradlew :tests:testWithoutTest262  # Unit tests only
+./gradlew :tests:test262              # Test262 only
+```
+
+### Backup Plan B: Module-Level Split
+
+If faster feedback is needed, implement finer-grained splitting:
+
+```yaml
+jobs:
+  build:               # Compile check (~2 min)
+    ./gradlew compileJava compileTestJava
+    
+  unit-rhino:           # rhino module (~2 min)
+    ./gradlew :rhino:test
+    
+  unit-tests:           # tests module without Test262 (~2 min)
+    ./gradlew :tests:testWithoutTest262
+    
+  test262:              # Test262 independent (~12 min)
+    ./gradlew :tests:test262
+    
+  matrix:               # Multi-JDK without Test262 (~2 min each)
+    ./gradlew test -x :tests:test
+```
+
+| Job | Time | Runner Minutes |
+|-----|------|----------------|
+| build | ~2 min | 2 |
+| unit-rhino | ~2 min | 2 |
+| unit-tests | ~2 min | 2 |
+| test262 | ~12 min | 12 |
+| matrix × 4 | ~2 min × 4 | 8 |
+| **Total** | Parallel ~12 min | **26 min** |
+
+Savings: 75 → 26 min (-65%)
+
+### Plan C: Test262 Sharding (Maximum Parallelism)
+
+Split Test262 into 4 parallel shards for ~3 min total:
+
+```yaml
+test262:
+  strategy:
+    matrix:
+      shard: [1, 2, 3, 4]
+  steps:
+    - run: ./gradlew :tests:test262 -Dtest262.shard=${{ matrix.shard }} -Dtest262.totalShards=4
+```
+
+Requires implementing sharding logic in Test262SuiteTest.java.
+
+| Metric | Value |
+|--------|-------|
+| Total Runner Minutes | 23 min |
+| Feedback Time | ~3 min |
+| Complexity | High |

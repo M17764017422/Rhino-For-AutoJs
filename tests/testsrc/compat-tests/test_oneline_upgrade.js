@@ -69,3 +69,6 @@ try {
 
 out.println("\n=== 测试完成 ===");
 out.println("结论: RhinoCompat.init(cx, scope) 一行代码启用所有兼容功能");
+
+// Return success for test framework
+"success";

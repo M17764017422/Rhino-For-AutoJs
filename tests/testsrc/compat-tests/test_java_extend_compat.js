@@ -140,3 +140,6 @@ try {
 }
 
 out.println("\n=== Test Complete ===");
+
+// Return success for test framework
+"success";

@@ -13,11 +13,32 @@ env:
   GRADLE_OPTS: "--enable-native-access=ALL-UNNAMED"
 
 jobs:
-  # First, "official" test: Build on Java 25, test on Java 11, compare test262.properties
-  # to see if tests are passing that are currently disabled.
-  test:
+  # Fast unit tests - excludes Test262 for quick feedback (~3 min)
+  unit-tests:
+    runs-on: ubuntu-latest
+    name: Unit Tests
+    steps:
+      - name: Check out Rhino
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.2
+      - name: Set up Java
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          java-version: '21'
+          distribution: 'adopt'
+      - name: Run unit tests (excluding Test262)
+        run: ./gradlew :rhino:test :rhino-tools:test :rhino-compat:test :tests:testWithoutTest262
+      - name: Upload results
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: ${{ always() }}
+        with:
+          name: reports-unit-tests
+          path: '*/build/reports'
+
+  # Test262 suite - runs independently with longer timeout (~12 min)
+  test262:
     runs-on: ubuntu-latest
     name: Test 262 Verification
+    timeout-minutes: 60
     steps:
       - name: Check out Rhino
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.2
@@ -37,14 +58,13 @@ jobs:
         # Currently Java 11 is required to have a reproducible result
         env:
           RHINO_TEST_JAVA_VERSION: "11"
-        run: >-
-          ./gradlew check -DupdateTest262properties
+        run: ./gradlew :tests:test262 -DupdateTest262properties
       - name: Upload results
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         if: ${{ always() }}
         with:
-          name: reports-java
-          path: '*/build/reports'
+          name: reports-test262
+          path: 'tests/build/reports'
       - name: Check updated state of test262.properties
         id: hashAfter
         run: echo "hash=${{ hashFiles('./tests/testsrc/test262.properties') }}" >> $GITHUB_OUTPUT
@@ -59,10 +79,11 @@ jobs:
             echo "The test262.properties file is up to date."
           fi
 
-  # Test various combinations of building and testing
+  # Test various combinations of building and testing (excludes Test262)
   # 支持 JDK 17-21，确保 spotless 兼容性
   matrix-test:
     runs-on: ubuntu-latest
+    needs: [unit-tests]
     strategy:
       fail-fast: false
       matrix:
@@ -87,8 +108,6 @@ jobs:
     steps:
     - name: Check out Rhino
       uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v4.2.2
-    - name: Check out test262
-      run: git submodule update --init --single-branch
     - name: Set up Java
       uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
       with:
@@ -96,11 +115,11 @@ jobs:
           ${{ matrix.test-java-version }}
           ${{ matrix.java-version }}
         distribution: 'adopt'
-    - name: Build and test ${{ matrix.name }}
+    - name: Build and test ${{ matrix.name }} (excludes Test262)
       env:
         RHINO_TEST_JAVA_VERSION: ${{ matrix.test-java-version }}
       run: >-
-        ./gradlew check ${{ matrix.multithread && '-Drhino.useThreadSafeObjectsByDefault=true' || '' }}
+        ./gradlew :rhino:test :rhino-tools:test :rhino-compat:test :tests:testWithoutTest262 ${{ matrix.multithread && '-Drhino.useThreadSafeObjectsByDefault=true' || '' }}
     - name: Upload results ${{ matrix.name }}
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       if: ${{ always() }}

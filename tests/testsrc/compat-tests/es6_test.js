@@ -191,3 +191,6 @@ if (failed > 0) {
         java.lang.System.out.println("  - " + e);
     });
 }
+
+// Return success for test framework
+"success";

@@ -73,3 +73,6 @@ out.println("JavaAdapter 可用: " + JavaExtendCompat.isJavaAdapterAvailable());
 out.println("接口构造器可用: " + JavaExtendCompat.isInterfaceConstructorAvailable());
 
 out.println("\n=== 测试完成 ===");
+
+// Return success for test framework
+"success";

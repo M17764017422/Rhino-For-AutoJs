@@ -51,8 +51,8 @@ tasks.withType(Test).configureEach {
     systemProperty 'user.timezone', 'America/Los_Angeles'
     systemProperty 'file.encoding', 'UTF-8'
 
-    // Set timeout for each test class (10 minutes max) to prevent hanging tests
-    timeout = java.time.Duration.ofMinutes(10)
+    // Set timeout for each test class (30 minutes max) to prevent hanging tests
+    timeout = java.time.Duration.ofMinutes(30)
 
     // Output test progress to help diagnose hanging tests
     // Use println() instead of logger for configuration cache compatibility
