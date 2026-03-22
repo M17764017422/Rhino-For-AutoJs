@@ -3693,13 +3693,13 @@ public class NativeRegExp extends ScriptableObject {
 
             obj.put("index", obj, Integer.valueOf(result.index));
             obj.put("input", obj, str);
-            if (!result.groups.isEmpty()) {
+            // ES spec: groups is an object if regex has named capture groups, undefined otherwise
+            if (re.namedCaptureGroups != null && !re.namedCaptureGroups.isEmpty()) {
                 var groups = new NativeObject();
-                for (var g : result.groups.entrySet()) {
-                    groups.put(
-                            g.getKey(),
-                            groups,
-                            g.getValue() == null ? Undefined.instance : g.getValue());
+                for (var entry : re.namedCaptureGroups.entrySet()) {
+                    String groupName = entry.getKey();
+                    String value = result.groups.get(groupName);
+                    groups.put(groupName, groups, value == null ? Undefined.instance : value);
                 }
                 obj.put("groups", obj, groups);
             } else {
@@ -4098,13 +4098,13 @@ public class NativeRegExp extends ScriptableObject {
 
             List<String> captures = result.captures;
             Object namedCaptures;
-            if (!result.groups.isEmpty()) {
+            // ES spec: groups is an object if regex has named capture groups, undefined otherwise
+            if (re.namedCaptureGroups != null && !re.namedCaptureGroups.isEmpty()) {
                 var groups = new NativeObject();
-                for (var g : result.groups.entrySet()) {
-                    groups.put(
-                            g.getKey(),
-                            groups,
-                            g.getValue() == null ? Undefined.instance : g.getValue());
+                for (var entry : re.namedCaptureGroups.entrySet()) {
+                    String groupName = entry.getKey();
+                    String value = result.groups.get(groupName);
+                    groups.put(groupName, groups, value == null ? Undefined.instance : value);
                 }
                 namedCaptures = groups;
             } else {
