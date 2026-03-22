@@ -5605,7 +5605,7 @@ public class ScriptRuntime {
                         } else if (cx.getLanguageVersion() >= Context.VERSION_ES6
                                 && NativeObject.PROTO_PROPERTY.equals(stringId)) {
                             if (value == null) {
-                                object.setPrototype(null);
+                                NativeObject.js_protoSetter(object, null);
                             } else if (value instanceof JSFunction) {
                                 if (((JSFunction) value).isShorthand()) {
                                     object.put(stringId, object, value);

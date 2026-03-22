@@ -12,6 +12,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.ScriptRuntime.StringIdOrIndex;
 import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.ScriptableObject;
 
 /**
  * This class converts a stream of JSON tokens into a JSON value.
@@ -119,11 +120,23 @@ public class JsonParser {
                     consume(':');
                     value = readValue();
 
+                    // ES spec: JSON.parse uses CreateDataProperty, not [[Set]]
+                    // This creates an own data property without invoking setters
                     StringIdOrIndex indexObj = ScriptRuntime.toStringIdOrIndex(id);
                     if (indexObj.getStringId() == null) {
-                        object.put(indexObj.getIndex(), object, value);
+                        ((ScriptableObject) object)
+                                .defineOwnProperty(
+                                        cx,
+                                        indexObj.getIndex(),
+                                        new ScriptableObject.DescriptorInfo(
+                                                true, true, true, value));
                     } else {
-                        object.put(indexObj.getStringId(), object, value);
+                        ((ScriptableObject) object)
+                                .defineOwnProperty(
+                                        cx,
+                                        indexObj.getStringId(),
+                                        new ScriptableObject.DescriptorInfo(
+                                                true, true, true, value));
                     }
                     needsComma = true;
                     break;
