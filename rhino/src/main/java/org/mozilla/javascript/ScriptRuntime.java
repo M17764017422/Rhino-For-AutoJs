@@ -3780,6 +3780,11 @@ public class ScriptRuntime {
     }
 
     public static String brief(Object value) {
+        // For primitives, return simple type name (used in error messages)
+        if (value == null) return "object"; // typeof null === "object"
+        if (Undefined.isUndefined(value)) return "undefined";
+        if (isSymbol(value)) return "symbol";
+        // For other types, return "value (Type)" format
         return Context.toString(value) + " (" + species(value) + ")";
     }
 

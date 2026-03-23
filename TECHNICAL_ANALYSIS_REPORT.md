@@ -3073,7 +3073,7 @@ import org.mozilla.javascript.xmlimpl.XMLLibImpl;
  *   RhinoCompat.init(context, scope);
  *   
  *   // 函数类型检查（替代 instanceof NativeFunction）
- *   if (RhinoCompat.isFunction(obj)) { ... }
+ *   if (RhinoCompat.checkFunction(obj)) { ... }
  *   
  *   // 函数调用
  *   RhinoCompat.call(fn, cx, scope, thisObj, args);
@@ -3370,7 +3370,7 @@ Object result = mGetter.call(cx, scope, thisObj, args);
 // 新代码，兼容所有版本
 RhinoCompat.init(context, scope);  // 自动选择初始化方式
 
-if (RhinoCompat.isFunction(getter)) {
+if (RhinoCompat.checkFunction(getter)) {
     mGetter = (Callable) getter;   // 或 RhinoCompat.wrapFunction(getter)
 }
 
@@ -3411,7 +3411,7 @@ Object result = RhinoCompat.call(getter, cx, scope, thisObj, args);
 | 设计要点 | 实现方式 |
 |----------|----------|
 | **以官方版本为基础** | 兼容层作为独立模块，不修改 Rhino 核心 |
-| **兼容旧版本 API** | 提供 `RhinoCompat.isFunction()` 等兼容方法 |
+| **兼容旧版本 API** | 提供 `RhinoCompat.checkFunction()` 等兼容方法 |
 | **自动版本检测** | 运行时检测 API 可用性 |
 | **适配器模式** | `NativeFunctionAdapter` 让新类型伪装成旧类型 |
 | **单点维护** | 升级时只需更新兼容层，下游无需改动 |

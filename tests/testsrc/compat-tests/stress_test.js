@@ -55,37 +55,37 @@ java.lang.System.out.println("--- Part 1: Function Type Detection ---\n");
 
 // 1.1 基本函数
 function regularFunc(a, b) { return a + b; }
-assertTrue("RhinoCompat.isFunction(regularFunc)", RhinoCompat.isFunction(regularFunc));
-assertTrue("RhinoCompat.isCallable(regularFunc)", RhinoCompat.isCallable(regularFunc));
-assertFalse("RhinoCompat.isArrowFunction(regularFunc)", RhinoCompat.isArrowFunction(regularFunc));
-assertFalse("RhinoCompat.isBoundFunction(regularFunc)", RhinoCompat.isBoundFunction(regularFunc));
+assertTrue("RhinoCompat.checkFunction(regularFunc)", RhinoCompat.checkFunction(regularFunc));
+assertTrue("RhinoCompat.checkCallable(regularFunc)", RhinoCompat.checkCallable(regularFunc));
+assertFalse("RhinoCompat.checkArrowFunction(regularFunc)", RhinoCompat.checkArrowFunction(regularFunc));
+assertFalse("RhinoCompat.checkBoundFunction(regularFunc)", RhinoCompat.checkBoundFunction(regularFunc));
 assertEqual("RhinoCompat.getParamCount(regularFunc)", RhinoCompat.getParamCount(regularFunc), 2);
 
 // 1.2 箭头函数
 var arrowFunc = (x, y, z) => x + y + z;
-assertTrue("RhinoCompat.isFunction(arrowFunc)", RhinoCompat.isFunction(arrowFunc));
-assertTrue("RhinoCompat.isCallable(arrowFunc)", RhinoCompat.isCallable(arrowFunc));
-assertTrue("RhinoCompat.isArrowFunction(arrowFunc)", RhinoCompat.isArrowFunction(arrowFunc));
+assertTrue("RhinoCompat.checkFunction(arrowFunc)", RhinoCompat.checkFunction(arrowFunc));
+assertTrue("RhinoCompat.checkCallable(arrowFunc)", RhinoCompat.checkCallable(arrowFunc));
+assertTrue("RhinoCompat.checkArrowFunction(arrowFunc)", RhinoCompat.checkArrowFunction(arrowFunc));
 assertEqual("RhinoCompat.getParamCount(arrowFunc)", RhinoCompat.getParamCount(arrowFunc), 3);
 
 // 1.3 生成器函数
 function* generatorFunc() { yield 1; yield 2; }
-assertTrue("RhinoCompat.isFunction(generatorFunc)", RhinoCompat.isFunction(generatorFunc));
-assertTrue("RhinoCompat.isGeneratorFunction(generatorFunc)", RhinoCompat.isGeneratorFunction(generatorFunc));
+assertTrue("RhinoCompat.checkFunction(generatorFunc)", RhinoCompat.checkFunction(generatorFunc));
+assertTrue("RhinoCompat.checkGeneratorFunction(generatorFunc)", RhinoCompat.checkGeneratorFunction(generatorFunc));
 
 // 1.4 绑定函数
 var boundFunc = regularFunc.bind(null, 10);
-assertTrue("RhinoCompat.isFunction(boundFunc)", RhinoCompat.isFunction(boundFunc));
-assertTrue("RhinoCompat.isBoundFunction(boundFunc)", RhinoCompat.isBoundFunction(boundFunc));
+assertTrue("RhinoCompat.checkFunction(boundFunc)", RhinoCompat.checkFunction(boundFunc));
+assertTrue("RhinoCompat.checkBoundFunction(boundFunc)", RhinoCompat.checkBoundFunction(boundFunc));
 
 // 1.5 非函数对象
 var obj = {x: 1};
-assertFalse("RhinoCompat.isFunction(obj)", RhinoCompat.isFunction(obj));
-assertFalse("RhinoCompat.isCallable(obj)", RhinoCompat.isCallable(obj));
+assertFalse("RhinoCompat.checkFunction(obj)", RhinoCompat.checkFunction(obj));
+assertFalse("RhinoCompat.checkCallable(obj)", RhinoCompat.checkCallable(obj));
 
 // 1.6 null 和 undefined
-assertFalse("RhinoCompat.isFunction(null)", RhinoCompat.isFunction(null));
-assertFalse("RhinoCompat.isFunction(undefined)", RhinoCompat.isFunction(undefined));
+assertFalse("RhinoCompat.checkFunction(null)", RhinoCompat.checkFunction(null));
+assertFalse("RhinoCompat.checkFunction(undefined)", RhinoCompat.checkFunction(undefined));
 
 // ========== Part 2: 函数名获取测试 ==========
 
@@ -156,9 +156,9 @@ for (var i = 0; i < stressTestCount; i++) {
     var fn3 = eval("((x) => x - " + i + ")");
     
     // 检测
-    if (!RhinoCompat.isFunction(fn1)) stressErrors++;
-    if (!RhinoCompat.isCallable(fn2)) stressErrors++;
-    if (!RhinoCompat.isArrowFunction(fn3)) stressErrors++;
+    if (!RhinoCompat.checkFunction(fn1)) stressErrors++;
+    if (!RhinoCompat.checkCallable(fn2)) stressErrors++;
+    if (!RhinoCompat.checkArrowFunction(fn3)) stressErrors++;
     
     // 包装/解包
     var wrapped = NativeFunctionAdapter.wrap(fn1);
@@ -182,11 +182,11 @@ assertEqual("RhinoCompat.getParamCount(noParams)", RhinoCompat.getParamCount(noP
 
 // 7.2 默认参数
 function withDefaults(a, b = 10) { return a + b; }
-assertTrue("RhinoCompat.isFunction(withDefaults)", RhinoCompat.isFunction(withDefaults));
+assertTrue("RhinoCompat.checkFunction(withDefaults)", RhinoCompat.checkFunction(withDefaults));
 
 // 7.3 rest 参数
 function withRest(...args) { return args.length; }
-assertTrue("RhinoCompat.isFunction(withRest)", RhinoCompat.isFunction(withRest));
+assertTrue("RhinoCompat.checkFunction(withRest)", RhinoCompat.checkFunction(withRest));
 
 // 7.4 立即执行函数
 var iifeResult = (function(x) { return x * 2; })(21);
@@ -227,12 +227,12 @@ java.lang.System.out.println("\n--- Part 10: ES6+ Features ---\n");
 
 // 箭头函数检测
 var es6Arrow = (x) => x * 2;
-assertTrue("ES6 arrow function detected", RhinoCompat.isArrowFunction(es6Arrow));
+assertTrue("ES6 arrow function detected", RhinoCompat.checkArrowFunction(es6Arrow));
 assertEqual("ES6 arrow function works", es6Arrow(21), 42);
 
 // 生成器检测
 function* es6Gen() { yield 1; yield 2; yield 3; }
-assertTrue("ES6 generator detected", RhinoCompat.isGeneratorFunction(es6Gen));
+assertTrue("ES6 generator detected", RhinoCompat.checkGeneratorFunction(es6Gen));
 var genInstance = es6Gen();
 assertEqual("Generator yields first value", genInstance.next().value, 1);
 

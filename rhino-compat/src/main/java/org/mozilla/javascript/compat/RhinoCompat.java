@@ -104,7 +104,7 @@ public final class RhinoCompat {
     }
 
     /** 检查是否已初始化 */
-    public static boolean isInitialized() {
+    public static boolean checkInitialized() {
         return initialized;
     }
 
@@ -182,22 +182,22 @@ public final class RhinoCompat {
     // ========== 函数类型检查 ==========
 
     /** 检查对象是否为 JavaScript 函数 */
-    public static boolean isFunction(Object obj) {
+    public static boolean checkFunction(Object obj) {
         return obj instanceof BaseFunction;
     }
 
     /** 检查对象是否可调用 */
-    public static boolean isCallable(Object obj) {
+    public static boolean checkCallable(Object obj) {
         return obj instanceof Callable;
     }
 
     /** 检查是否为箭头函数 */
-    public static boolean isArrowFunction(Object obj) {
+    public static boolean checkArrowFunction(Object obj) {
         return FunctionCompat.isArrowFunction(obj);
     }
 
     /** 检查是否为生成器函数 */
-    public static boolean isGeneratorFunction(Object obj) {
+    public static boolean checkGeneratorFunction(Object obj) {
         if (obj instanceof JSFunction) {
             return ((JSFunction) obj).getDescriptor().isES6Generator();
         }
@@ -208,7 +208,7 @@ public final class RhinoCompat {
     }
 
     /** 检查是否为绑定函数 */
-    public static boolean isBoundFunction(Object obj) {
+    public static boolean checkBoundFunction(Object obj) {
         return obj instanceof BoundFunction;
     }
 

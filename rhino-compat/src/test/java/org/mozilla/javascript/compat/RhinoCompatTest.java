@@ -48,11 +48,11 @@ public class RhinoCompatTest {
 
     @Test
     public void testInit() {
-        assertFalse("Should not be initialized before init()", RhinoCompat.isInitialized());
+        assertFalse("Should not be initialized before init()", RhinoCompat.checkInitialized());
 
         RhinoCompat.init(cx, scope);
 
-        assertTrue("Should be initialized after init()", RhinoCompat.isInitialized());
+        assertTrue("Should be initialized after init()", RhinoCompat.checkInitialized());
     }
 
     @Test
@@ -60,26 +60,26 @@ public class RhinoCompatTest {
         RhinoCompat.init(cx, scope);
         RhinoCompat.init(cx, scope); // Second call should be no-op
 
-        assertTrue("Should still be initialized", RhinoCompat.isInitialized());
+        assertTrue("Should still be initialized", RhinoCompat.checkInitialized());
     }
 
     @Test
     public void testInitWithScopeOnly() {
-        assertFalse("Should not be initialized before init()", RhinoCompat.isInitialized());
+        assertFalse("Should not be initialized before init()", RhinoCompat.checkInitialized());
 
         RhinoCompat.init(scope);
 
-        assertTrue("Should be initialized after init(scope)", RhinoCompat.isInitialized());
+        assertTrue("Should be initialized after init(scope)", RhinoCompat.checkInitialized());
     }
 
     @Test
     public void testReset() {
         RhinoCompat.init(cx, scope);
-        assertTrue("Should be initialized", RhinoCompat.isInitialized());
+        assertTrue("Should be initialized", RhinoCompat.checkInitialized());
 
         RhinoCompat.reset();
 
-        assertFalse("Should not be initialized after reset()", RhinoCompat.isInitialized());
+        assertFalse("Should not be initialized after reset()", RhinoCompat.checkInitialized());
     }
 
     // ========== extend Function Injection Tests ==========
@@ -112,42 +112,43 @@ public class RhinoCompatTest {
         Object result =
                 cx.evaluateString(
                         scope, "function test(a, b) { return a + b; } test", "test", 1, null);
-        assertTrue("Regular function should be detected", RhinoCompat.isFunction(result));
+        assertTrue("Regular function should be detected", RhinoCompat.checkFunction(result));
     }
 
     @Test
     public void testIsFunctionWithArrowFunction() throws Exception {
         Object result = cx.evaluateString(scope, "var fn = (x) => x * 2; fn", "test", 1, null);
-        assertTrue("Arrow function should be detected as function", RhinoCompat.isFunction(result));
+        assertTrue(
+                "Arrow function should be detected as function", RhinoCompat.checkFunction(result));
     }
 
     @Test
     public void testIsFunctionWithObject() throws Exception {
         Object result = cx.evaluateString(scope, "var obj = {x: 1}; obj", "test", 1, null);
-        assertFalse("Object should not be detected as function", RhinoCompat.isFunction(result));
+        assertFalse("Object should not be detected as function", RhinoCompat.checkFunction(result));
     }
 
     @Test
     public void testIsFunctionWithNull() {
-        assertFalse("null should not be detected as function", RhinoCompat.isFunction(null));
+        assertFalse("null should not be detected as function", RhinoCompat.checkFunction(null));
     }
 
     @Test
     public void testIsCallableWithFunction() throws Exception {
         Object result = cx.evaluateString(scope, "function test() {} test", "test", 1, null);
-        assertTrue("Function should be callable", RhinoCompat.isCallable(result));
+        assertTrue("Function should be callable", RhinoCompat.checkCallable(result));
     }
 
     @Test
     public void testIsCallableWithObject() throws Exception {
         Object result = cx.evaluateString(scope, "var obj = {}; obj", "test", 1, null);
-        assertFalse("Object should not be callable", RhinoCompat.isCallable(result));
+        assertFalse("Object should not be callable", RhinoCompat.checkCallable(result));
     }
 
     @Test
     public void testIsArrowFunctionWithArrow() throws Exception {
         Object result = cx.evaluateString(scope, "var fn = (x) => x; fn", "test", 1, null);
-        assertTrue("Arrow function should be detected", RhinoCompat.isArrowFunction(result));
+        assertTrue("Arrow function should be detected", RhinoCompat.checkArrowFunction(result));
     }
 
     @Test
@@ -155,7 +156,7 @@ public class RhinoCompatTest {
         Object result = cx.evaluateString(scope, "function test() {} test", "test", 1, null);
         assertFalse(
                 "Regular function should not be detected as arrow",
-                RhinoCompat.isArrowFunction(result));
+                RhinoCompat.checkArrowFunction(result));
     }
 
     @Test
@@ -163,14 +164,15 @@ public class RhinoCompatTest {
         Object result =
                 cx.evaluateString(scope, "function* gen() { yield 1; } gen", "test", 1, null);
         assertTrue(
-                "Generator function should be detected", RhinoCompat.isGeneratorFunction(result));
+                "Generator function should be detected",
+                RhinoCompat.checkGeneratorFunction(result));
     }
 
     @Test
     public void testIsBoundFunction() throws Exception {
         Object result =
                 cx.evaluateString(scope, "function test() {} test.bind(null)", "test", 1, null);
-        assertTrue("Bound function should be detected", RhinoCompat.isBoundFunction(result));
+        assertTrue("Bound function should be detected", RhinoCompat.checkBoundFunction(result));
     }
 
     // ========== Function Invocation Tests ==========

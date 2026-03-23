@@ -9,20 +9,22 @@ out.println("=== JavaExtendCompat Test ===\n");
 out.println("--- Test 1: Availability Methods ---");
 var JavaExtendCompat = Packages.org.mozilla.javascript.compat.JavaExtendCompat;
 
-var test1a = JavaExtendCompat.isJavaExtendAvailable() === false;
-out.println("[PASS] isJavaExtendAvailable() === false: " + test1a);
+// Note: isXxx() methods are accessed as properties due to JavaBean property convention
+var test1a = JavaExtendCompat.isJavaExtendAvailable === false;
+out.println("[PASS] isJavaExtendAvailable === false: " + test1a);
 
-var test1b = JavaExtendCompat.isJavaAdapterAvailable() === true;
-out.println("[PASS] isJavaAdapterAvailable() === true: " + test1b);
+var test1b = JavaExtendCompat.isJavaAdapterAvailable === true;
+out.println("[PASS] isJavaAdapterAvailable === true: " + test1b);
 
-var test1c = JavaExtendCompat.isInterfaceConstructorAvailable() === true;
-out.println("[PASS] isInterfaceConstructorAvailable() === true: " + test1c);
+var test1c = JavaExtendCompat.isInterfaceConstructorAvailable === true;
+out.println("[PASS] isInterfaceConstructorAvailable === true: " + test1c);
 
 // Test 2: Recommended approach
 out.println("\n--- Test 2: Recommended Approach ---");
-var recommended = String(JavaExtendCompat.getRecommendedApproach());
+// Note: getXxx() methods are accessed as properties due to JavaBean property convention
+var recommended = String(JavaExtendCompat.recommendedApproach);
 var test2 = recommended !== null && recommended.length > 0;
-out.println("[PASS] getRecommendedApproach() returns: " + (test2 ? recommended : "null"));
+out.println("[PASS] recommendedApproach returns: " + (test2 ? recommended : "null"));
 
 // Test 3: Interface implementation using new Interface() syntax (Rhino 2.0.0+)
 out.println("\n--- Test 3: Direct Interface Implementation ---");

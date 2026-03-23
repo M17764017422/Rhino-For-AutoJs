@@ -44,7 +44,7 @@
  * if (fn instanceof NativeFunction) { ... }
  *
  * // 新代码（推荐）
- * if (RhinoCompat.isFunction(fn)) { ... }
+ * if (RhinoCompat.checkFunction(fn)) { ... }
  * // 或者
  * if (FunctionCompat.isJavaScriptFunction(fn)) { ... }
  * </pre>

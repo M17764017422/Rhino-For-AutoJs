@@ -4,6 +4,8 @@
 
 package org.mozilla.javascript.tests.compat;
 
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.drivers.LanguageVersion;
 import org.mozilla.javascript.drivers.RhinoTest;
 import org.mozilla.javascript.drivers.ScriptTestsBase;
 
@@ -13,4 +15,5 @@ import org.mozilla.javascript.drivers.ScriptTestsBase;
  * Symbol, for...of, generators, and various Object/Array methods.
  */
 @RhinoTest("testsrc/compat-tests/es6_test.js")
+@LanguageVersion(Context.VERSION_ES6)
 public class ES6CompatTest extends ScriptTestsBase {}

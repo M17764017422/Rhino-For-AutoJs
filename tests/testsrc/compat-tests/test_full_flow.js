@@ -68,9 +68,9 @@ try {
 
 // Test 4: 检测可用性
 out.println("\n--- Test 4: 兼容层状态 ---");
-out.println("Java.extend 可用: " + JavaExtendCompat.isJavaExtendAvailable());
-out.println("JavaAdapter 可用: " + JavaExtendCompat.isJavaAdapterAvailable());
-out.println("接口构造器可用: " + JavaExtendCompat.isInterfaceConstructorAvailable());
+out.println("Java.extend 可用: " + JavaExtendCompat.isJavaExtendAvailable);
+out.println("JavaAdapter 可用: " + JavaExtendCompat.isJavaAdapterAvailable);
+out.println("接口构造器可用: " + JavaExtendCompat.isInterfaceConstructorAvailable);
 
 out.println("\n=== 测试完成 ===");
 

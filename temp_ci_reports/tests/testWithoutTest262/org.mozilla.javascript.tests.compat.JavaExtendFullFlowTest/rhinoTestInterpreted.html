@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - rhinoTestInterpreted</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<div class="breadcrumbs">
+<a class="breadcrumb" href="../index.html">all</a> &gt; 
+<a class="breadcrumb" href="index.html">org.mozilla.javascript.tests.compat.JavaExtendFullFlowTest</a> &gt; 
+<span class="breadcrumb">rhinoTestInterpreted</span>
+</div>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a class="failureGroup" href="#">Gradle Test Run :tests:testWithoutTest262</a>
+</li>
+</ul>
+<div class="tab">
+<h2>Gradle Test Run :tests:testWithoutTest262</h2>
+<h1>rhinoTestInterpreted</h1>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a class="" href="#">summary</a>
+</li>
+<li>
+<a class="" href="#">standard output</a>
+</li>
+</ul>
+<div class="tab">
+<h2>summary</h2>
+<div>
+<div class="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox">
+<div class="counter">1</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox">
+<div class="counter">1</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox">
+<div class="counter">0</div>
+<p>skipped</p>
+</div>
+</td>
+<td>
+<div class="infoBox duration">
+<div class="counter">2.006s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox failures successRate">
+<div class="percent">0%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div class="result-details">
+<h3>Failure details</h3>
+<span class="code">
+<pre id="root-0-test-failure-rhinoTestInterpreted">java.lang.RuntimeException: org.mozilla.javascript.EcmaError: TypeError: isJavaExtendAvailable is not a function, it is object. (testsrc/compat-tests/test_full_flow.js#71)
+	at org.mozilla.javascript.drivers.ScriptTestsBase.executeRhinoScript(ScriptTestsBase.java:86)
+	at org.mozilla.javascript.drivers.ScriptTestsBase.rhinoTestInterpreted(ScriptTestsBase.java:150)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+Caused by: org.mozilla.javascript.EcmaError: TypeError: isJavaExtendAvailable is not a function, it is object. (testsrc/compat-tests/test_full_flow.js#71)
+	at org.mozilla.javascript.ScriptRuntime.constructError(ScriptRuntime.java:5804)
+	at org.mozilla.javascript.ScriptRuntime.constructError(ScriptRuntime.java:5785)
+	at org.mozilla.javascript.ScriptRuntime.typeError(ScriptRuntime.java:5817)
+	at org.mozilla.javascript.ScriptRuntime.typeErrorById(ScriptRuntime.java:5822)
+	at org.mozilla.javascript.ScriptRuntime.notFunctionError(ScriptRuntime.java:5930)
+	at org.mozilla.javascript.ScriptRuntime$LookupResult.getCallable(ScriptRuntime.java:6291)
+	at org.mozilla.javascript.Interpreter$DoCallByteCode.execute(Interpreter.java:3396)
+	at org.mozilla.javascript.Interpreter.interpretFunction(Interpreter.java:1852)
+	at org.mozilla.javascript.Interpreter.interpretLoop(Interpreter.java:1628)
+	at org.mozilla.javascript.Interpreter.interpret(Interpreter.java:1211)
+	at org.mozilla.javascript.InterpreterData.execute(InterpreterData.java:104)
+	at org.mozilla.javascript.JSScript.exec(JSScript.java:42)
+	at org.mozilla.javascript.ContextFactory.doTopCall(ContextFactory.java:337)
+	at org.mozilla.javascript.ScriptRuntime.doTopCall(ScriptRuntime.java:5006)
+	at org.mozilla.javascript.JSScript.exec(JSScript.java:36)
+	at org.mozilla.javascript.Context.evaluateReader(Context.java:1226)
+	at org.mozilla.javascript.drivers.ScriptTestsBase.executeRhinoScript(ScriptTestsBase.java:78)
+	... 2 more
+Cause 1: org.mozilla.javascript.EcmaError: TypeError: isJavaExtendAvailable is not a function, it is object. (testsrc/compat-tests/test_full_flow.js#71)
+	at app//org.mozilla.javascript.ScriptRuntime.constructError(ScriptRuntime.java:5804)
+	at app//org.mozilla.javascript.ScriptRuntime.constructError(ScriptRuntime.java:5785)
+	at app//org.mozilla.javascript.ScriptRuntime.typeError(ScriptRuntime.java:5817)
+	at app//org.mozilla.javascript.ScriptRuntime.typeErrorById(ScriptRuntime.java:5822)
+	at app//org.mozilla.javascript.ScriptRuntime.notFunctionError(ScriptRuntime.java:5930)
+	at app//org.mozilla.javascript.ScriptRuntime$LookupResult.getCallable(ScriptRuntime.java:6291)
+	at app//org.mozilla.javascript.Interpreter$DoCallByteCode.execute(Interpreter.java:3396)
+	at app//org.mozilla.javascript.Interpreter.interpretFunction(Interpreter.java:1852)
+	at app//org.mozilla.javascript.Interpreter.interpretLoop(Interpreter.java:1628)
+	at app//org.mozilla.javascript.Interpreter.interpret(Interpreter.java:1211)
+	at app//org.mozilla.javascript.InterpreterData.execute(InterpreterData.java:104)
+	at app//org.mozilla.javascript.JSScript.exec(JSScript.java:42)
+	at app//org.mozilla.javascript.ContextFactory.doTopCall(ContextFactory.java:337)
+	at app//org.mozilla.javascript.ScriptRuntime.doTopCall(ScriptRuntime.java:5006)
+	at app//org.mozilla.javascript.JSScript.exec(JSScript.java:36)
+	at app//org.mozilla.javascript.Context.evaluateReader(Context.java:1226)
+	at app//org.mozilla.javascript.drivers.ScriptTestsBase.executeRhinoScript(ScriptTestsBase.java:78)
+	at app//org.mozilla.javascript.drivers.ScriptTestsBase.rhinoTestInterpreted(ScriptTestsBase.java:150)
+	at java.base@21.0.10/java.lang.reflect.Method.invoke(Method.java:580)
+
+</pre>
+<button class="clipboard-copy-btn" aria-label="Copy to clipboard" data-copy-element-id="root-0-test-failure-rhinoTestInterpreted">Copy</button>
+</span>
+</div>
+</div>
+</div>
+<div class="tab">
+<h2>standard output</h2>
+<span class="code">
+<pre id="root-0-test-stdout-rhinoTestInterpreted">=== 完整流程测试 ===
+
+--- Test 1: 单接口实现 ---
+[FAIL] TypeError: extend is not a function, it is object.
+
+--- Test 2: 多接口实现 ---
+[FAIL] TypeError: extend is not a function, it is object.
+
+--- Test 3: 原生 new Interface() 语法 ---
+[PASS] 原生语法创建: true
+  [listener2] run() called
+[PASS] 原生 run() 执行成功
+
+--- Test 4: 兼容层状态 ---
+</pre>
+<button class="clipboard-copy-btn" aria-label="Copy to clipboard" data-copy-element-id="root-0-test-stdout-rhinoTestInterpreted">Copy</button>
+</span>
+</div>
+</div>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="https://www.gradle.org">Gradle 9.4.0</a> at Mar 22, 2026, 10:04:04 PM</p>
+</div>
+</div>
+</body>
+</html>
