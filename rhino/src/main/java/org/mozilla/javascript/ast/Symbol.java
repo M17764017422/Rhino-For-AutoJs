@@ -13,7 +13,7 @@ import org.mozilla.javascript.Token;
 public class Symbol {
 
     // One of Token.FUNCTION, Token.LP (for parameters), Token.VAR,
-    // Token.LET, or Token.CONST
+    // Token.LET, Token.CONST, or Token.CLASS
     private int declType;
     private int index = -1;
     private String name;
@@ -26,7 +26,7 @@ public class Symbol {
      * Constructs a new Symbol with a specific name and declaration type
      *
      * @param declType {@link Token#FUNCTION}, {@link Token#LP} (for params), {@link Token#VAR},
-     *     {@link Token#LET} or {@link Token#CONST}
+     *     {@link Token#LET}, {@link Token#CONST} or {@link Token#CLASS}
      */
     public Symbol(int declType, String name) {
         setName(name);
@@ -44,7 +44,8 @@ public class Symbol {
                 || declType == Token.LP
                 || declType == Token.VAR
                 || declType == Token.LET
-                || declType == Token.CONST))
+                || declType == Token.CONST
+                || declType == Token.CLASS))
             throw new IllegalArgumentException("Invalid declType: " + declType);
         this.declType = declType;
     }

@@ -5979,9 +5979,9 @@ public class ScriptRuntime {
     }
 
     /**
-     * Checks if a variable value is in the Temporal Dead Zone (TDZ) and returns the value.
-     * This is used for let/const variable access - accessing a variable before its declaration
-     * should throw a ReferenceError.
+     * Checks if a variable value is in the Temporal Dead Zone (TDZ) and returns the value. This is
+     * used for let/const variable access - accessing a variable before its declaration should throw
+     * a ReferenceError.
      *
      * @param value the variable value to check
      * @param varName the variable name for error reporting
@@ -5996,8 +5996,8 @@ public class ScriptRuntime {
     }
 
     /**
-     * Throws a ReferenceError for TDZ access. Used when accessing a variable
-     * that is in the Temporal Dead Zone.
+     * Throws a ReferenceError for TDZ access. Used when accessing a variable that is in the
+     * Temporal Dead Zone.
      *
      * @param varName the variable name for error reporting
      * @throws EcmaError ReferenceError always
@@ -6354,6 +6354,278 @@ public class ScriptRuntime {
         }
         return -1;
     }
+
+    // ==================== ES2022 Class Support ====================
+
+    /**
+     * Creates a new NativeClass instance representing an ES6+ class.
+     *
+     * @param cx the current context
+     * @param scope the current scope
+     * @param className the class name (or empty string for anonymous classes)
+     * @param superClass the superclass constructor (or null)
+     * @param constructor the constructor function
+     * @return the created NativeClass
+     */
+    public static NativeClass createClass(
+            Context cx,
+            Scriptable scope,
+            String className,
+            Scriptable superClass,
+            Function constructor) {
+        NativeClass classObj = new NativeClass(className, superClass, constructor, scope);
+
+        // Execute static initialization
+        classObj.executeStaticInitialization(cx, scope);
+
+        return classObj;
+    }
+
+    /**
+     * Creates a new NativeClass with methods.
+     *
+     * @param cx the current context
+     * @param scope the current scope
+     * @param className the class name
+     * @param superClass the superclass constructor (or null)
+     * @param constructor the constructor function
+     * @param protoMethods the prototype methods (NativeObject with name->function pairs)
+     * @param staticMethods the static methods (NativeObject with name->function pairs)
+     * @return the created NativeClass
+     */
+    public static NativeClass createClass(
+            Context cx,
+            Scriptable scope,
+            String className,
+            Scriptable superClass,
+            Function constructor,
+            Scriptable protoMethods,
+            Scriptable staticMethods,
+            Function instanceFieldInitFn,
+            Function staticInitFn) {
+        NativeClass classObj = new NativeClass(className, superClass, constructor, scope);
+
+        // Store instance field initializer function
+        if (instanceFieldInitFn != null) {
+            classObj.setInstanceFieldInitializers(instanceFieldInitFn);
+        }
+
+        // Store static initializer function
+        if (staticInitFn != null) {
+            classObj.setStaticBlocks(staticInitFn);
+        }
+
+        // Add prototype methods to class.prototype
+        if (protoMethods != null) {
+            Scriptable classPrototype = (Scriptable) classObj.get("prototype", classObj);
+            Object[] ids = protoMethods.getIds();
+            for (Object id : ids) {
+                Object method;
+                if (id instanceof String) {
+                    method = protoMethods.get((String) id, protoMethods);
+                    ScriptableObject.putProperty(classPrototype, (String) id, method);
+                } else if (id instanceof Integer) {
+                    method = protoMethods.get((Integer) id, protoMethods);
+                    ScriptableObject.putProperty(classPrototype, (Integer) id, method);
+                } else if (id instanceof Number) {
+                    // Handle numeric keys
+                    int idx = ((Number) id).intValue();
+                    method = protoMethods.get(idx, protoMethods);
+                    ScriptableObject.putProperty(classPrototype, idx, method);
+                }
+            }
+        }
+
+        // Add static methods to the class itself
+        if (staticMethods != null) {
+            Object[] ids = staticMethods.getIds();
+            for (Object id : ids) {
+                Object method;
+                if (id instanceof String) {
+                    method = staticMethods.get((String) id, staticMethods);
+                    ScriptableObject.putProperty(classObj, (String) id, method);
+                } else if (id instanceof Integer) {
+                    method = staticMethods.get((Integer) id, staticMethods);
+                    ScriptableObject.putProperty(classObj, (Integer) id, method);
+                } else if (id instanceof Number) {
+                    // Handle numeric keys
+                    int idx = ((Number) id).intValue();
+                    method = staticMethods.get(idx, staticMethods);
+                    ScriptableObject.putProperty(classObj, idx, method);
+                }
+            }
+        }
+
+        // Execute static initialization (static blocks and static fields)
+        classObj.executeStaticInitialization(cx, scope);
+
+        return classObj;
+    }
+
+    /**
+     * Gets a private field value from an instance.
+     *
+     * @param instance the instance
+     * @param fieldName the private field name
+     * @param classObj the class that owns the field
+     * @param brand the class brand for access validation
+     * @return the field value
+     */
+    public static Object getPrivateField(
+            Object instance, String fieldName, NativeClass classObj, Object brand) {
+        return classObj.getPrivateField(instance, fieldName, brand);
+    }
+
+    /**
+     * Sets a private field value on an instance.
+     *
+     * @param instance the instance
+     * @param fieldName the private field name
+     * @param value the value to set
+     * @param classObj the class that owns the field
+     * @param brand the class brand for access validation
+     * @return the set value
+     */
+    public static Object setPrivateField(
+            Object instance, String fieldName, Object value, NativeClass classObj, Object brand) {
+        classObj.setPrivateField(instance, fieldName, value, brand);
+        return value;
+    }
+
+    /**
+     * Gets a static private field value.
+     *
+     * @param fieldName the private field name
+     * @param classObj the class that owns the field
+     * @param brand the class brand for access validation
+     * @return the field value
+     */
+    public static Object getStaticPrivateField(
+            String fieldName, NativeClass classObj, Object brand) {
+        return classObj.getStaticPrivateField(fieldName, brand);
+    }
+
+    /**
+     * Sets a static private field value.
+     *
+     * @param fieldName the private field name
+     * @param value the value to set
+     * @param classObj the class that owns the field
+     * @param brand the class brand for access validation
+     * @return the set value
+     */
+    public static Object setStaticPrivateField(
+            String fieldName, Object value, NativeClass classObj, Object brand) {
+        classObj.setStaticPrivateField(fieldName, value, brand);
+        return value;
+    }
+
+    /**
+     * Gets a private field value from an instance, looking up the class from scope. This is used
+     * for compiled code to access private fields.
+     *
+     * @param instance the instance
+     * @param fieldName the private field name
+     * @param cx the current context
+     * @param scope the current scope
+     * @return the field value
+     */
+    public static Object getPrivateFieldInternal(
+            Object instance, String fieldName, Context cx, Scriptable scope) {
+        // Get the class from the instance's constructor
+        if (instance instanceof Scriptable) {
+            Object constructor = ((Scriptable) instance).get("constructor", (Scriptable) instance);
+            if (constructor instanceof NativeClass) {
+                NativeClass classObj = (NativeClass) constructor;
+                Object brand = classObj.getClassBrand();
+                return classObj.getPrivateField(instance, fieldName, brand);
+            }
+        }
+        throw constructError(
+                "TypeError",
+                "Cannot access private field '" + fieldName + "' on non-class instance");
+    }
+
+    /**
+     * Sets a private field value on an instance, looking up the class from scope. This is used for
+     * compiled code to access private fields.
+     *
+     * @param instance the instance
+     * @param fieldName the private field name
+     * @param value the value to set
+     * @param cx the current context
+     * @param scope the current scope
+     * @return the set value
+     */
+    public static Object setPrivateFieldInternal(
+            Object instance, String fieldName, Object value, Context cx, Scriptable scope) {
+        // Get the class from the instance's constructor
+        if (instance instanceof Scriptable) {
+            Object constructor = ((Scriptable) instance).get("constructor", (Scriptable) instance);
+            if (constructor instanceof NativeClass) {
+                NativeClass classObj = (NativeClass) constructor;
+                Object brand = classObj.getClassBrand();
+                classObj.setPrivateField(instance, fieldName, value, brand);
+                return value;
+            }
+        }
+        throw constructError(
+                "TypeError",
+                "Cannot access private field '" + fieldName + "' on non-class instance");
+    }
+
+    /**
+     * Creates an uninitialized object for derived class construction.
+     *
+     * @param classObj the class being constructed
+     * @param scope the current scope
+     * @return the uninitialized object
+     */
+    public static UninitializedObject createUninitializedObject(
+            NativeClass classObj, Scriptable scope) {
+        return UninitializedObject.create(classObj, scope);
+    }
+
+    /**
+     * Initializes an uninitialized object by calling super().
+     *
+     * @param uninitialized the uninitialized object
+     * @param cx the current context
+     * @param args the arguments to pass to super()
+     * @return the initialized instance
+     */
+    public static Scriptable initializeWithSuper(
+            UninitializedObject uninitialized, Context cx, Object[] args) {
+        return uninitialized.initializeWithSuper(cx, args);
+    }
+
+    /**
+     * Checks if an object is an uninitialized object.
+     *
+     * @param obj the object to check
+     * @return true if the object is uninitialized
+     */
+    public static boolean isUninitializedObject(Object obj) {
+        return obj instanceof UninitializedObject && !((UninitializedObject) obj).isInitialized();
+    }
+
+    /**
+     * Gets the initialized instance from an uninitialized or initialized object.
+     *
+     * @param obj the object (may be uninitialized or initialized)
+     * @return the initialized instance
+     */
+    public static Scriptable getInitializedInstance(Object obj) {
+        if (obj instanceof UninitializedObject) {
+            return ((UninitializedObject) obj).getInitializedInstance();
+        }
+        if (obj instanceof Scriptable) {
+            return (Scriptable) obj;
+        }
+        throw typeErrorById("msg.not.obj", obj);
+    }
+
+    // ==================== End ES2022 Class Support ====================
 
     public static final Object[] emptyArgs = new Object[0];
     public static final String[] emptyStrings = new String[0];

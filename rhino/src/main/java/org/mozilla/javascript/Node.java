@@ -461,6 +461,8 @@ public class Node implements Iterable<Node> {
                 return "number_of_spread";
             case OBJECT_REST_PROP:
                 return "object_rest_prop";
+            case CONSTRUCTOR_METHOD:
+                return "constructor_method";
 
             default:
                 Kit.codeBug();

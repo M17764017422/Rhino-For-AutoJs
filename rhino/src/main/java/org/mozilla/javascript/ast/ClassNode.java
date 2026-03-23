@@ -9,7 +9,6 @@ package org.mozilla.javascript.ast;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import org.mozilla.javascript.Node;
 import org.mozilla.javascript.Token;
 
 /**

@@ -35,9 +35,9 @@ public final class UniqueTag implements Serializable {
     public static final UniqueTag DOUBLE_MARK = new UniqueTag(ID_DOUBLE_MARK);
 
     /**
-     * Tag to mark variables in the Temporal Dead Zone (TDZ).
-     * Used for let/const variables that have been hoisted but not yet initialized.
-     * Accessing a variable with this value should throw a ReferenceError.
+     * Tag to mark variables in the Temporal Dead Zone (TDZ). Used for let/const variables that have
+     * been hoisted but not yet initialized. Accessing a variable with this value should throw a
+     * ReferenceError.
      */
     public static final UniqueTag TDZ_VALUE = new UniqueTag(ID_TDZ_VALUE);
 

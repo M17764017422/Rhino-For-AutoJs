@@ -407,6 +407,12 @@ public class Parser {
         return currentToken; // return unflagged token
     }
 
+    /** Returns the string value of the peeked token (without consuming it). */
+    private String peekTokenName() throws IOException {
+        peekToken(); // Ensure token is peeked
+        return ts.getString();
+    }
+
     private int lineNumber() {
         return lastTokenLineno;
     }
@@ -2588,6 +2594,7 @@ public class Parser {
             case Token.VAR:
             case Token.CONST:
             case Token.FUNCTION:
+            case Token.CLASS:
                 if (symbol != null) {
                     if (symDeclType == Token.VAR) addStrictWarning("msg.var.redecl", name);
                     else if (symDeclType == Token.LP) {
@@ -3292,6 +3299,12 @@ public class Parser {
                     return makeErrorNode();
                 }
 
+            case Token.PRIVATE_FIELD:
+                // Private field access: obj.#field or this.#field
+                // TokenStream has already consumed the entire #name
+                ref = createNameNode(true, Token.PRIVATE_FIELD);
+                break;
+
             default:
                 if (compilerEnv.isReservedKeywordAsIdentifier()) {
                     // allow keywords as property names, e.g. ({if: 1})
@@ -3582,8 +3595,15 @@ public class Parser {
                 }
 
             case Token.SUPER:
+                // Allow super in:
+                // 1. Object literal shorthand methods (insideMethod = true)
+                // 2. Class methods and constructors (insideMethod = true)
+                // 3. When explicitly allowed by compilerEnv
+                // 4. ES6+ class constructors (inside function body with ES6+)
                 if (((insideFunctionParams() || insideFunctionBody()) && insideMethod)
-                        || compilerEnv.isAllowSuper()) {
+                        || compilerEnv.isAllowSuper()
+                        || (compilerEnv.getLanguageVersion() >= Context.VERSION_ES6
+                                && (insideFunctionParams() || insideFunctionBody()))) {
                     consumeToken();
                     pos = ts.tokenBeg;
                     end = ts.tokenEnd;
@@ -5378,6 +5398,13 @@ public class Parser {
                     checkMutableReference(ref);
                     return new Node(Token.SET_REF, ref, right);
                 }
+            case Token.GET_PRIVATE_FIELD:
+                {
+                    // Private field assignment: this.#field = value
+                    Node obj = left.getFirstChild();
+                    Node id = left.getLastChild();
+                    return new Node(Token.SET_PRIVATE_FIELD, obj, id, right);
+                }
         }
 
         throw codeBug();
@@ -5540,8 +5567,8 @@ public class Parser {
     }
 
     /**
-     * Parse class body: { ClassElementList }
-     * ClassBody may contain methods, fields, static blocks, and empty statements.
+     * Parse class body: { ClassElementList } ClassBody may contain methods, fields, static blocks,
+     * and empty statements.
      */
     private void parseClassBody(ClassNode classNode) throws IOException {
         boolean hasConstructor = false;
@@ -5563,22 +5590,15 @@ public class Parser {
                     hasConstructor = true;
                 }
 
-                // Check for duplicate static block (only one allowed per class)
-                if (element.isStaticBlock()) {
-                    if (hasStaticBlock) {
-                        reportError("msg.class.duplicate.static.block");
-                    }
-                    hasStaticBlock = true;
-                }
+                // Note: ES2022 allows multiple static initialization blocks
+                // They execute in definition order
 
                 classNode.addElement(element);
             }
         }
     }
 
-    /**
-     * Parse a class element: method, field, or static block.
-     */
+    /** Parse a class element: method, field, or static block. */
     private ClassElement parseClassElement(ClassNode classNode) throws IOException {
         int pos = ts.tokenBeg;
         int lineno = lineNumber();
@@ -5589,51 +5609,82 @@ public class Parser {
         boolean isGenerator = false;
         boolean isGetter = false;
         boolean isSetter = false;
+        AstNode key = null;
 
-        // Check for static keyword
-        if (matchToken(Token.NAME, true) && "static".equals(ts.getString())) {
-            isStatic = true;
-        }
+        // First pass: check for modifiers (static, async, get, set)
+        // We need to be careful not to consume the property name
 
-        // Check for static block: static { ... }
-        if (isStatic && matchToken(Token.LC, true)) {
-            return parseStaticBlock(pos, lineno, column);
-        }
-
-        // Check for async method
-        if (matchToken(Token.NAME, true) && "async".equals(ts.getString())) {
-            // Check if followed by '*' or a valid property name
-            int next = peekToken();
-            if (next == Token.MUL || next == Token.NAME || next == Token.STRING
-                    || next == Token.NUMBER || next == Token.LB) {
-                isAsync = true;
-            } else {
-                // 'async' is the property name
-                return parseClassField(pos, lineno, column, isStatic, false, createNameNode(true, Token.NAME));
+        while (true) {
+            int tt = peekToken();
+            if (tt == Token.NAME) {
+                // Peek at the name string without consuming
+                String name = peekTokenName();
+                if ("static".equals(name) && !isStatic) {
+                    consumeToken();
+                    // Check for static block immediately
+                    if (peekToken() == Token.LC) {
+                        consumeToken();
+                        return parseStaticBlock(pos, lineno, column);
+                    }
+                    isStatic = true;
+                    continue;
+                } else if ("async".equals(name) && !isAsync && !isStatic) {
+                    // Check if followed by valid property name or '*'
+                    consumeToken();
+                    int next = peekToken();
+                    if (next == Token.MUL
+                            || next == Token.NAME
+                            || next == Token.STRING
+                            || next == Token.NUMBER
+                            || next == Token.LB
+                            || next == Token.PRIVATE_FIELD) {
+                        isAsync = true;
+                        continue;
+                    }
+                    // 'async' is the property name
+                    key = createNameNode(true, Token.NAME);
+                    break;
+                } else if ("get".equals(name) && !isGetter && !isSetter && !isAsync) {
+                    consumeToken();
+                    int next = peekToken();
+                    if (next != Token.LP
+                            && next != Token.EOF
+                            && next != Token.SEMI
+                            && next != Token.RC) {
+                        isGetter = true;
+                        continue;
+                    }
+                    // 'get' is the property name
+                    key = createNameNode(true, Token.NAME);
+                    break;
+                } else if ("set".equals(name) && !isGetter && !isSetter && !isAsync) {
+                    consumeToken();
+                    int next = peekToken();
+                    if (next != Token.LP
+                            && next != Token.EOF
+                            && next != Token.SEMI
+                            && next != Token.RC) {
+                        isSetter = true;
+                        continue;
+                    }
+                    // 'set' is the property name
+                    key = createNameNode(true, Token.NAME);
+                    break;
+                }
+            } else if (tt == Token.MUL && !isGenerator) {
+                consumeToken();
+                isGenerator = true;
+                continue;
             }
+            // Not a modifier, break to parse property key
+            break;
         }
 
-        // Check for generator method (*)
-        if (matchToken(Token.MUL, true)) {
-            isGenerator = true;
+        // Parse property key if not already parsed
+        if (key == null) {
+            key = parseClassElementName();
         }
 
-        // Check for getter/setter
-        if (matchToken(Token.NAME, true)) {
-            String name = ts.getString();
-            if ("get".equals(name)) {
-                isGetter = true;
-            } else if ("set".equals(name)) {
-                isSetter = true;
-            } else {
-                // It's a property name
-                return parseClassFieldOrMethod(pos, lineno, column, isStatic, isAsync, isGenerator,
-                        createNameNode(true, Token.NAME));
-            }
-        }
-
-        // Parse property key
-        AstNode key = parseClassElementName();
         if (key == null) {
             // Empty statement (;)
             if (matchToken(Token.SEMI, true)) {
@@ -5653,9 +5704,7 @@ public class Parser {
         }
     }
 
-    /**
-     * Parse static initialization block: static { ... }
-     */
+    /** Parse static initialization block: static { ... } */
     private ClassElement parseStaticBlock(int pos, int lineno, int column) throws IOException {
         ClassElement element = new ClassElement(pos);
         element.setElementType(ClassElement.STATIC_BLOCK);
@@ -5690,8 +5739,8 @@ public class Parser {
     }
 
     /**
-     * Parse class element name (property key).
-     * Can be: identifier, string, number, computed property [expr], or private field #name
+     * Parse class element name (property key). Can be: identifier, string, number, computed
+     * property [expr], or private field #name
      */
     private AstNode parseClassElementName() throws IOException {
         int tt = peekToken();
@@ -5724,12 +5773,8 @@ public class Parser {
                 return computed;
 
             case Token.PRIVATE_FIELD:
-                // Private field #name
+                // Private field #name - TokenStream already consumed the entire #name
                 consumeToken();
-                int privatePos = ts.tokenBeg;
-                if (!mustMatchToken(Token.NAME, "msg.invalid.private.field", true)) {
-                    return null;
-                }
                 Name privateName = createNameNode(true, Token.PRIVATE_FIELD);
                 return privateName;
 
@@ -5742,11 +5787,16 @@ public class Parser {
         }
     }
 
-    /**
-     * Parse class method definition.
-     */
-    private ClassElement parseClassMethod(int pos, int lineno, int column,
-            boolean isStatic, boolean isAsync, boolean isGenerator, AstNode key) throws IOException {
+    /** Parse class method definition. */
+    private ClassElement parseClassMethod(
+            int pos,
+            int lineno,
+            int column,
+            boolean isStatic,
+            boolean isAsync,
+            boolean isGenerator,
+            AstNode key)
+            throws IOException {
         ClassElement element = new ClassElement(pos);
         element.setElementType(ClassElement.METHOD);
         element.setStatic(isStatic);
@@ -5772,11 +5822,10 @@ public class Parser {
         return element;
     }
 
-    /**
-     * Parse class getter or setter.
-     */
-    private ClassElement parseClassAccessor(int pos, int lineno, int column,
-            boolean isStatic, boolean isGetter, AstNode key) throws IOException {
+    /** Parse class getter or setter. */
+    private ClassElement parseClassAccessor(
+            int pos, int lineno, int column, boolean isStatic, boolean isGetter, AstNode key)
+            throws IOException {
         ClassElement element = new ClassElement(pos);
         element.setElementType(ClassElement.METHOD);
         element.setStatic(isStatic);
@@ -5800,11 +5849,10 @@ public class Parser {
         return element;
     }
 
-    /**
-     * Parse class field definition.
-     */
-    private ClassElement parseClassField(int pos, int lineno, int column,
-            boolean isStatic, boolean isGenerator, AstNode key) throws IOException {
+    /** Parse class field definition. */
+    private ClassElement parseClassField(
+            int pos, int lineno, int column, boolean isStatic, boolean isGenerator, AstNode key)
+            throws IOException {
         ClassElement element = new ClassElement(pos);
         element.setElementType(ClassElement.FIELD);
         element.setStatic(isStatic);
@@ -5834,11 +5882,16 @@ public class Parser {
         return element;
     }
 
-    /**
-     * Parse class field or method (determine based on next token).
-     */
-    private ClassElement parseClassFieldOrMethod(int pos, int lineno, int column,
-            boolean isStatic, boolean isAsync, boolean isGenerator, AstNode key) throws IOException {
+    /** Parse class field or method (determine based on next token). */
+    private ClassElement parseClassFieldOrMethod(
+            int pos,
+            int lineno,
+            int column,
+            boolean isStatic,
+            boolean isAsync,
+            boolean isGenerator,
+            AstNode key)
+            throws IOException {
         if (peekToken() == Token.LP) {
             return parseClassMethod(pos, lineno, column, isStatic, isAsync, isGenerator, key);
         } else {
@@ -5846,9 +5899,7 @@ public class Parser {
         }
     }
 
-    /**
-     * Get the string value of a property key.
-     */
+    /** Get the string value of a property key. */
     private String getKeyString(AstNode key) {
         if (key instanceof Name) {
             return ((Name) key).getIdentifier();

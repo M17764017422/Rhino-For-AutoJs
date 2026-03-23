@@ -764,11 +764,9 @@ public final class IRFactory {
     /**
      * Transform a ClassNode AST into IR Node tree.
      *
-     * <p>Class transformation creates:
-     * - A NEW_CLASS IR node that will create the class at runtime
-     * - Transformed methods and fields
-     * - Field initializers injected into constructor
-     * - Static block execution code
+     * <p>Class transformation creates: - A NEW_CLASS IR node that will create the class at runtime
+     * - Transformed methods and fields - Field initializers injected into constructor - Static
+     * block execution code
      */
     private Node transformClass(ClassNode classNode) {
         astNodePos.push(classNode);
@@ -792,11 +790,14 @@ public final class IRFactory {
             }
 
             // Transform class elements
-            Node protoMethods = new Node(Token.OBJECTLIT);
-            Node staticMethods = new Node(Token.OBJECTLIT);
+            // Use lists to collect properties before building OBJECTLIT nodes
+            List<Object> protoKeys = new ArrayList<>();
+            List<Node> protoValues = new ArrayList<>();
+            List<Object> staticKeys = new ArrayList<>();
+            List<Node> staticValues = new ArrayList<>();
             Node instanceFields = new Node(Token.BLOCK);
-            Node staticFields = new Node(Token.BLOCK);
-            Node staticBlocks = new Node(Token.BLOCK);
+            // Collect static initialization nodes in definition order
+            List<Node> staticInitNodes = new ArrayList<>();
 
             FunctionNode constructor = null;
 
@@ -805,69 +806,127 @@ public final class IRFactory {
                     constructor = element.getMethod();
                 } else if (element.isMethod()) {
                     Node methodNode = transformFunction(element.getMethod());
-                    String keyString = getKeyStringFromElement(element);
 
                     if (element.isStatic()) {
                         // Static method
                         Node keyNode = createPropertyKeyNode(element);
-                        Node propNode = new Node(Token.COLON, keyNode, methodNode);
-                        staticMethods.addChildToBack(propNode);
+                        if (keyNode.getType() == Token.STRING) {
+                            staticKeys.add(keyNode.getString());
+                        } else if (keyNode.getType() == Token.NUMBER) {
+                            staticKeys.add((int) keyNode.getDouble());
+                        } else {
+                            staticKeys.add(keyNode);
+                        }
+                        // Mark as method
+                        staticValues.add(createUnary(Token.METHOD, methodNode));
                     } else {
                         // Instance method
                         Node keyNode = createPropertyKeyNode(element);
-                        Node propNode = new Node(Token.COLON, keyNode, methodNode);
-                        protoMethods.addChildToBack(propNode);
+                        if (keyNode.getType() == Token.STRING) {
+                            protoKeys.add(keyNode.getString());
+                        } else if (keyNode.getType() == Token.NUMBER) {
+                            protoKeys.add((int) keyNode.getDouble());
+                        } else {
+                            protoKeys.add(keyNode);
+                        }
+                        // Mark as method
+                        protoValues.add(createUnary(Token.METHOD, methodNode));
                     }
                 } else if (element.isField()) {
                     AstNode fieldValue = element.getFieldValue();
-                    Node valueNode = fieldValue != null ? transform(fieldValue) : new Node(Token.UNDEFINED);
+                    Node valueNode =
+                            fieldValue != null ? transform(fieldValue) : new Node(Token.UNDEFINED);
 
                     if (element.isStatic()) {
-                        // Static field - will be executed after class creation
+                        // Static field - add to static init in definition order
                         Node keyNode = createPropertyKeyNode(element);
-                        Node fieldInit = new Node(Token.EXPR_VOID,
-                                createAssignment(Token.ASSIGN,
-                                        new Node(Token.GETPROP,
-                                                parser.createName(classNode.getName() != null ? classNode.getName() : ""),
-                                                keyNode),
-                                        valueNode));
-                        staticFields.addChildToBack(fieldInit);
+                        Node fieldInit =
+                                new Node(
+                                        Token.EXPR_VOID,
+                                        createAssignment(
+                                                Token.ASSIGN,
+                                                new Node(
+                                                        Token.GETPROP,
+                                                        new Node(Token.THIS),
+                                                        keyNode),
+                                                valueNode));
+                        staticInitNodes.add(fieldInit);
                     } else {
                         // Instance field - will be injected into constructor
                         Node keyNode = createPropertyKeyNode(element);
-                        Node fieldInit = new Node(Token.EXPR_VOID,
-                                createAssignment(Token.ASSIGN,
-                                        new Node(Token.GETPROP, new Node(Token.THIS), keyNode),
-                                        valueNode));
+                        Node fieldInit =
+                                new Node(
+                                        Token.EXPR_VOID,
+                                        createAssignment(
+                                                Token.ASSIGN,
+                                                new Node(
+                                                        Token.GETPROP,
+                                                        new Node(Token.THIS),
+                                                        keyNode),
+                                                valueNode));
                         instanceFields.addChildToBack(fieldInit);
                     }
                 } else if (element.isStaticBlock()) {
-                    // Static block
+                    // Static block - add to static init in definition order
                     Block block = element.getStaticBlock();
                     if (block != null) {
                         Node blockNode = transform(block);
-                        staticBlocks.addChildToBack(blockNode);
+                        // Add each statement from the block
+                        Node child = blockNode.getFirstChild();
+                        while (child != null) {
+                            Node next = child.getNext();
+                            staticInitNodes.add(child);
+                            child = next;
+                        }
                     }
                 }
             }
 
+            // Build protoMethods OBJECTLIT node
+            Node protoMethods = new Node(Token.OBJECTLIT);
+            if (protoKeys.isEmpty()) {
+                protoMethods.putProp(Node.OBJECT_IDS_PROP, ScriptRuntime.emptyArgs);
+            } else {
+                Object[] protoIds = protoKeys.toArray();
+                protoMethods.putProp(Node.OBJECT_IDS_PROP, protoIds);
+                for (Node value : protoValues) {
+                    protoMethods.addChildToBack(value);
+                }
+            }
+
+            // Build staticMethods OBJECTLIT node
+            Node staticMethods = new Node(Token.OBJECTLIT);
+            if (staticKeys.isEmpty()) {
+                staticMethods.putProp(Node.OBJECT_IDS_PROP, ScriptRuntime.emptyArgs);
+            } else {
+                Object[] staticIds = staticKeys.toArray();
+                staticMethods.putProp(Node.OBJECT_IDS_PROP, staticIds);
+                for (Node value : staticValues) {
+                    staticMethods.addChildToBack(value);
+                }
+            }
+
             // Handle constructor
+            Node ctorNode;
             if (constructor != null) {
-                // Inject instance field initializers into constructor
-                Node ctorNode = transformFunction(constructor);
-                // Field injection will be handled at runtime
-                classIRNode.addChildToBack(ctorNode);
+                ctorNode = transformFunction(constructor);
             } else {
                 // Create default constructor
-                Node defaultCtor = createDefaultConstructor(classNode);
-                classIRNode.addChildToBack(defaultCtor);
+                ctorNode = createDefaultConstructor(classNode);
             }
+            classIRNode.addChildToBack(ctorNode);
 
             classIRNode.addChildToBack(protoMethods);
             classIRNode.addChildToBack(staticMethods);
-            classIRNode.addChildToBack(instanceFields);
-            classIRNode.addChildToBack(staticFields);
-            classIRNode.addChildToBack(staticBlocks);
+
+            // Create instance field initializer function
+            Node instanceFieldInitFn = createFieldInitializerFunction(instanceFields);
+            classIRNode.addChildToBack(instanceFieldInitFn);
+
+            // Create static initialization function (combines static fields and static blocks in
+            // definition order)
+            Node staticInitFn = createStaticInitializerFunction(staticInitNodes);
+            classIRNode.addChildToBack(staticInitFn);
 
             // For class declaration, create a VAR statement to bind the class name
             if (classNode.isClassStatement() && className != null) {
@@ -884,9 +943,7 @@ public final class IRFactory {
         }
     }
 
-    /**
-     * Create a default constructor for a class without explicit constructor.
-     */
+    /** Create a default constructor for a class without explicit constructor. */
     private Node createDefaultConstructor(ClassNode classNode) {
         // Create a simple function node that calls super() if derived
         FunctionNode fn = new FunctionNode();
@@ -905,12 +962,84 @@ public final class IRFactory {
         }
         // Base class default constructor: constructor() { }
 
-        return initFunction(fn, parser.currentScriptOrFn.addFunction(fn), body, FunctionNode.FUNCTION_EXPRESSION);
+        return initFunction(
+                fn,
+                parser.currentScriptOrFn.addFunction(fn),
+                body,
+                FunctionNode.FUNCTION_EXPRESSION);
     }
 
     /**
-     * Create a property key node from a class element.
+     * Create a function that initializes instance fields. This function will be called with 'this'
+     * bound to the new instance.
+     *
+     * @param instanceFields BLOCK node containing field initialization expressions
+     * @return a FUNCTION node that initializes fields when called
      */
+    private Node createFieldInitializerFunction(Node instanceFields) {
+        // If no fields to initialize, return null
+        if (instanceFields == null || !instanceFields.hasChildren()) {
+            return new Node(Token.NULL);
+        }
+
+        // Create a function node
+        FunctionNode fn = new FunctionNode();
+        fn.setSourceName(parser.currentScriptOrFn.getNextTempName());
+        fn.setFunctionType(FunctionNode.FUNCTION_EXPRESSION);
+
+        // The function body is the instance fields block
+        Node body = instanceFields;
+
+        return initFunction(
+                fn,
+                parser.currentScriptOrFn.addFunction(fn),
+                body,
+                FunctionNode.FUNCTION_EXPRESSION);
+    }
+
+    /**
+     * Create a function that executes static initialization (static fields and static blocks). This
+     * function will be called once when the class is created.
+     *
+     * @param staticFields BLOCK node containing static field initialization expressions
+     * @param staticBlocks BLOCK node containing static block statements
+     * @param className the class name (for binding in the function scope)
+     * @return a FUNCTION node that executes static initialization when called
+     */
+    /**
+     * Create a function that executes static initialization (static fields and static blocks). This
+     * function will be called once when the class is created. Nodes are added in definition order
+     * as per ES6 spec.
+     *
+     * @param staticInitNodes list of nodes in definition order (static field initializers and
+     *     static block statements)
+     * @return a FUNCTION node that executes static initialization when called
+     */
+    private Node createStaticInitializerFunction(List<Node> staticInitNodes) {
+        // If no static initialization needed, return null
+        if (staticInitNodes == null || staticInitNodes.isEmpty()) {
+            return new Node(Token.NULL);
+        }
+
+        // Create a function node
+        FunctionNode fn = new FunctionNode();
+        fn.setSourceName(parser.currentScriptOrFn.getNextTempName());
+        fn.setFunctionType(FunctionNode.FUNCTION_EXPRESSION);
+
+        // Build the function body - nodes are already in definition order
+        Node body = new Node(Token.BLOCK);
+        for (Node node : staticInitNodes) {
+            body.addChildToBack(node);
+        }
+
+        return initFunction(
+                fn,
+                parser.currentScriptOrFn.addFunction(fn),
+                body,
+                FunctionNode.FUNCTION_EXPRESSION);
+    }
+
+    /** Create a property key node from a class element. */
     private Node createPropertyKeyNode(ClassElement element) {
         AstNode key = element.getKey();
         if (key instanceof Name) {
@@ -925,9 +1054,7 @@ public final class IRFactory {
         return transform(key);
     }
 
-    /**
-     * Get the string key from a class element.
-     */
+    /** Get the string key from a class element. */
     private String getKeyStringFromElement(ClassElement element) {
         AstNode key = element.getKey();
         if (key instanceof Name) {
@@ -1129,10 +1256,9 @@ public final class IRFactory {
 
     private Node transformLiteral(AstNode node) {
         // Trying to call super as a function. See 15.4.2 Static Semantics: HasDirectSuper
-        // Note that this will need to change when classes are implemented, because in a class
-        // constructor calling "super()" _is_ allowed.
-        if (node.getParent() instanceof FunctionCall && node.getType() == Token.SUPER)
-            parser.reportError("msg.super.shorthand.function");
+        // ES2022: In a class constructor (derived class), calling "super()" is allowed.
+        // The check is now handled in the Parser based on insideMethod and ES6+ language version.
+        // No error should be reported here for valid super() calls in class contexts.
         return node;
     }
 
@@ -1239,7 +1365,15 @@ public final class IRFactory {
 
     private Node transformPropertyGet(PropertyGet node) {
         Node target = transform(node.getTarget());
-        String name = node.getProperty().getIdentifier();
+        Name property = node.getProperty();
+        String name = property.getIdentifier();
+
+        // Check if this is a private field access (e.g., this.#field)
+        if (property.getType() == Token.PRIVATE_FIELD) {
+            // Generate GET_PRIVATE_FIELD IR node
+            return new Node(Token.GET_PRIVATE_FIELD, target, Node.newString(name));
+        }
+
         return createPropertyGet(target, null, name, 0, node.type);
     }
 
@@ -2735,6 +2869,16 @@ public final class IRFactory {
                     Node opLeft = new Node(Token.USE_STACK);
                     Node op = new Node(assignOp, opLeft, right);
                     return propagateSuperFromLhs(new Node(Token.SET_REF_OP, ref, op), left);
+                }
+            case Token.GET_PRIVATE_FIELD:
+                {
+                    // Private field compound assignment: this.#field += value
+                    Node obj = left.getFirstChild();
+                    Node id = left.getLastChild();
+                    Node opLeft = new Node(Token.USE_STACK);
+                    Node op = new Node(assignOp, opLeft, right);
+                    return propagateSuperFromLhs(
+                            new Node(Token.SET_PRIVATE_FIELD_OP, obj, id, op), left);
                 }
         }
 

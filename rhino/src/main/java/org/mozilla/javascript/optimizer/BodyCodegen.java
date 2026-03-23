@@ -1503,6 +1503,10 @@ class BodyCodegen {
                 }
                 break;
 
+            case Token.GET_PRIVATE_FIELD:
+                visitGetPrivateField(node, child);
+                break;
+
             case Token.GETVAR:
                 visitGetVar(node);
                 break;
@@ -1535,6 +1539,11 @@ class BodyCodegen {
             case Token.SETELEM:
             case Token.SETELEM_OP:
                 visitSetElem(type, node, child);
+                break;
+
+            case Token.SET_PRIVATE_FIELD:
+            case Token.SET_PRIVATE_FIELD_OP:
+                visitSetPrivateField(type, node, child);
                 break;
 
             case Token.SET_REF:
@@ -1780,6 +1789,140 @@ class BodyCodegen {
                     cfw.markLabel(end);
                     break;
                 }
+
+            case Token.PRIVATE_FIELD:
+                // Private field access - get the field name with '#' prefix
+                {
+                    String fieldName = node.getString();
+                    // For now, return the field name as a string
+                    // Full implementation would call ScriptRuntime.getPrivateField
+                    cfw.addPush(fieldName);
+                }
+                break;
+
+            case Token.NEW_CLASS:
+                // Class creation: call ScriptRuntime.createClass
+                // The NEW_CLASS node structure:
+                //   child0: class name (NAME or NULL)
+                //   child1: super class (expression or NULL)
+                //   child2: constructor (FUNCTION)
+                //   child3: prototype methods (OBJECTLIT)
+                //   child4: static methods (OBJECTLIT)
+                //   child5: instance field init function (FUNCTION or NULL)
+                //   child6: static fields (BLOCK)
+                //   child7: static blocks (BLOCK)
+                {
+                    // Push Context
+                    cfw.addALoad(contextLocal);
+                    // Push scope
+                    cfw.addALoad(variableObjectLocal);
+
+                    // Push class name
+                    Node nameChild = child;
+                    if (nameChild != null && nameChild.getType() == Token.NAME) {
+                        cfw.addPush(nameChild.getString());
+                        child = child.getNext();
+                    } else {
+                        cfw.addPush(""); // anonymous class
+                        if (nameChild != null && nameChild.getType() == Token.NULL) {
+                            child = nameChild.getNext();
+                        }
+                    }
+
+                    // Push super class
+                    Node superChild = child;
+                    if (superChild != null) {
+                        if (superChild.getType() == Token.NULL) {
+                            cfw.add(ByteCode.ACONST_NULL);
+                            child = superChild.getNext();
+                        } else {
+                            generateExpression(superChild, node);
+                            child = superChild.getNext();
+                        }
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push constructor
+                    Node ctorChild = child;
+                    if (ctorChild != null && ctorChild.getType() == Token.FUNCTION) {
+                        int fnIndex = ctorChild.getExistingIntProp(Node.FUNCTION_PROP);
+                        OptFunctionNode ofn = OptFunctionNode.get(scriptOrFn, fnIndex);
+                        int fnType = ofn.fnode.getFunctionType();
+                        visitFunction(ofn, fnType);
+                        child = ctorChild.getNext();
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push protoMethods (OBJECTLIT)
+                    Node protoMethodsChild = child;
+                    if (protoMethodsChild != null) {
+                        generateExpression(protoMethodsChild, node);
+                        child = protoMethodsChild.getNext();
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push staticMethods (OBJECTLIT)
+                    Node staticMethodsChild = child;
+                    if (staticMethodsChild != null) {
+                        generateExpression(staticMethodsChild, node);
+                        child = staticMethodsChild.getNext();
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push instanceFieldInitFn (FUNCTION or NULL)
+                    Node fieldInitChild = child;
+                    if (fieldInitChild != null) {
+                        if (fieldInitChild.getType() == Token.FUNCTION) {
+                            int fnIndex = fieldInitChild.getExistingIntProp(Node.FUNCTION_PROP);
+                            OptFunctionNode ofn = OptFunctionNode.get(scriptOrFn, fnIndex);
+                            visitFunction(ofn, FunctionNode.FUNCTION_EXPRESSION);
+                            child = fieldInitChild.getNext();
+                        } else if (fieldInitChild.getType() == Token.NULL) {
+                            cfw.add(ByteCode.ACONST_NULL);
+                            child = fieldInitChild.getNext();
+                        } else {
+                            cfw.add(ByteCode.ACONST_NULL);
+                            child = fieldInitChild.getNext();
+                        }
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push staticInitFn (FUNCTION or NULL)
+                    Node staticInitChild = child;
+                    if (staticInitChild != null) {
+                        if (staticInitChild.getType() == Token.FUNCTION) {
+                            int fnIndex = staticInitChild.getExistingIntProp(Node.FUNCTION_PROP);
+                            OptFunctionNode ofn = OptFunctionNode.get(scriptOrFn, fnIndex);
+                            visitFunction(ofn, FunctionNode.FUNCTION_EXPRESSION);
+                        } else if (staticInitChild.getType() == Token.NULL) {
+                            cfw.add(ByteCode.ACONST_NULL);
+                        } else {
+                            cfw.add(ByteCode.ACONST_NULL);
+                        }
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Call ScriptRuntime.createClass with 9 parameters
+                    addScriptRuntimeInvoke(
+                            "createClass",
+                            "(Lorg/mozilla/javascript/Context;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Ljava/lang/String;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Lorg/mozilla/javascript/Function;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Lorg/mozilla/javascript/Function;"
+                                    + "Lorg/mozilla/javascript/Function;"
+                                    + ")Lorg/mozilla/javascript/NativeClass;");
+                }
+                break;
 
             default:
                 throw new RuntimeException("Unexpected node type " + type);
@@ -4925,4 +5068,78 @@ class BodyCodegen {
 
     private int unnestedYieldCount = 0;
     private IdentityHashMap<Node, String> unnestedYields = new IdentityHashMap<>();
+
+    /**
+     * Generate bytecode for private field read access (this.#field).
+     *
+     * <p>Stack: [... target] -> [... value]
+     */
+    private void visitGetPrivateField(Node node, Node child) {
+        // Generate: ScriptRuntime.getPrivateField(instance, fieldName, cx, scope)
+        generateExpression(child, node); // instance (this)
+        Node fieldNameNode = child.getNext();
+        cfw.addPush(fieldNameNode.getString()); // fieldName
+
+        // Push context and scope for class lookup
+        cfw.addALoad(contextLocal);
+        cfw.addALoad(variableObjectLocal);
+
+        addScriptRuntimeInvoke(
+                "getPrivateFieldInternal",
+                "(Ljava/lang/Object;"
+                        + "Ljava/lang/String;"
+                        + "Lorg/mozilla/javascript/Context;"
+                        + "Lorg/mozilla/javascript/Scriptable;"
+                        + ")Ljava/lang/Object;");
+    }
+
+    /**
+     * Generate bytecode for private field write access (this.#field = value).
+     *
+     * <p>Stack: [... target] -> ... (value left on stack)
+     */
+    private void visitSetPrivateField(int type, Node node, Node child) {
+        // Generate: ScriptRuntime.setPrivateField(instance, fieldName, value, cx, scope)
+        generateExpression(child, node); // instance (this)
+        child = child.getNext();
+        Node fieldNameNode = child;
+
+        if (type == Token.SET_PRIVATE_FIELD_OP) {
+            // Compound assignment: need to get current value first
+            cfw.add(ByteCode.DUP); // duplicate instance
+            cfw.addPush(fieldNameNode.getString());
+            cfw.addALoad(contextLocal);
+            cfw.addALoad(variableObjectLocal);
+            addScriptRuntimeInvoke(
+                    "getPrivateFieldInternal",
+                    "(Ljava/lang/Object;"
+                            + "Ljava/lang/String;"
+                            + "Lorg/mozilla/javascript/Context;"
+                            + "Lorg/mozilla/javascript/Scriptable;"
+                            + ")Ljava/lang/Object;");
+        }
+
+        child = child.getNext();
+        generateExpression(child, node); // value
+
+        // For compound assignment, we need to perform the operation
+        if (type == Token.SET_PRIVATE_FIELD_OP) {
+            // Stack: ... instance currentValue value
+            // Need to store the operation result
+            throw new RuntimeException("SET_PRIVATE_FIELD_OP not yet implemented");
+        }
+
+        cfw.addPush(fieldNameNode.getString());
+        cfw.addALoad(contextLocal);
+        cfw.addALoad(variableObjectLocal);
+
+        addScriptRuntimeInvoke(
+                "setPrivateFieldInternal",
+                "(Ljava/lang/Object;"
+                        + "Ljava/lang/String;"
+                        + "Ljava/lang/Object;"
+                        + "Lorg/mozilla/javascript/Context;"
+                        + "Lorg/mozilla/javascript/Scriptable;"
+                        + ")Ljava/lang/Object;");
+    }
 }

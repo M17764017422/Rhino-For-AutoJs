@@ -253,7 +253,11 @@ public class Token {
             CLASS_ELEMENT = EXTENDS + 1, // class element AST node type
             PRIVATE_FIELD = CLASS_ELEMENT + 1, // private field # prefix
             NEW_CLASS = PRIVATE_FIELD + 1, // IR node for class creation
-            LAST_TOKEN = NEW_CLASS + 1;
+            GET_PRIVATE_FIELD = NEW_CLASS + 1, // IR node for private field read
+            SET_PRIVATE_FIELD = GET_PRIVATE_FIELD + 1, // IR node for private field write
+            SET_PRIVATE_FIELD_OP =
+                    SET_PRIVATE_FIELD + 1, // IR node for private field compound assign
+            LAST_TOKEN = SET_PRIVATE_FIELD_OP + 1;
 
     /**
      * Returns a name for the token. If Rhino is compiled with certain hardcoded debugging flags in
@@ -668,6 +672,12 @@ public class Token {
                 return "PRIVATE_FIELD";
             case NEW_CLASS:
                 return "NEW_CLASS";
+            case GET_PRIVATE_FIELD:
+                return "GET_PRIVATE_FIELD";
+            case SET_PRIVATE_FIELD:
+                return "SET_PRIVATE_FIELD";
+            case SET_PRIVATE_FIELD_OP:
+                return "SET_PRIVATE_FIELD_OP";
         }
 
         // Token without name
