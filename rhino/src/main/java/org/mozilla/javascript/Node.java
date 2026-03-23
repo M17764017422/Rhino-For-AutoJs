@@ -70,7 +70,8 @@ public class Node implements Iterable<Node> {
             SUPER_PROPERTY_ACCESS = 31,
             NUMBER_OF_SPREAD = 32,
             OBJECT_REST_PROP = 33, // marks a CALL node as object rest operation
-            LAST_PROP = OBJECT_REST_PROP,
+            CONSTRUCTOR_METHOD = 34, // marks a FunctionNode as class constructor
+            LAST_PROP = CONSTRUCTOR_METHOD,
             FIRST_PROP = FUNCTION_PROP;
 
     // values of ISNUMBER_PROP to specify
