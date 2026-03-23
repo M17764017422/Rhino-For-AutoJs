@@ -246,7 +246,14 @@ public class Token {
             NULLISH_COALESCING = DOTDOTDOT + 1, // nullish coalescing (??)
             QUESTION_DOT = NULLISH_COALESCING + 1, // optional chaining operator (?.)
             OBJECT_REST = QUESTION_DOT + 1, // ES6 object rest operation
-            LAST_TOKEN = OBJECT_REST + 1;
+
+            // ===== ES2022 Class 支持 =====
+            CLASS = OBJECT_REST + 1, // class keyword
+            EXTENDS = CLASS + 1, // extends keyword
+            CLASS_ELEMENT = EXTENDS + 1, // class element AST node type
+            PRIVATE_FIELD = CLASS_ELEMENT + 1, // private field # prefix
+            NEW_CLASS = PRIVATE_FIELD + 1, // IR node for class creation
+            LAST_TOKEN = NEW_CLASS + 1;
 
     /**
      * Returns a name for the token. If Rhino is compiled with certain hardcoded debugging flags in
@@ -651,6 +658,16 @@ public class Token {
                 return "DOTDOTDOT";
             case QUESTION_DOT:
                 return "QUESTION_DOT";
+            case CLASS:
+                return "CLASS";
+            case EXTENDS:
+                return "EXTENDS";
+            case CLASS_ELEMENT:
+                return "CLASS_ELEMENT";
+            case PRIVATE_FIELD:
+                return "PRIVATE_FIELD";
+            case NEW_CLASS:
+                return "NEW_CLASS";
         }
 
         // Token without name
@@ -720,6 +737,10 @@ public class Token {
                 return "yield";
             case Token.SUPER:
                 return "super";
+            case Token.CLASS:
+                return "class";
+            case Token.EXTENDS:
+                return "extends";
             case Token.CATCH:
                 return "catch";
             case Token.CONST:
