@@ -5973,6 +5973,39 @@ public class ScriptRuntime {
         return constructError("ReferenceError", message);
     }
 
+    public static EcmaError referenceErrorById(String messageId, Object... args) {
+        String msg = getMessageById(messageId, args);
+        return referenceError(msg);
+    }
+
+    /**
+     * Checks if a variable value is in the Temporal Dead Zone (TDZ) and returns the value.
+     * This is used for let/const variable access - accessing a variable before its declaration
+     * should throw a ReferenceError.
+     *
+     * @param value the variable value to check
+     * @param varName the variable name for error reporting
+     * @return the value if not in TDZ
+     * @throws EcmaError ReferenceError if the value is TDZ_VALUE
+     */
+    public static Object getVarWithTDZCheck(Object value, String varName) {
+        if (value == UniqueTag.TDZ_VALUE) {
+            throw referenceErrorById("msg.tdz.access", varName);
+        }
+        return value;
+    }
+
+    /**
+     * Throws a ReferenceError for TDZ access. Used when accessing a variable
+     * that is in the Temporal Dead Zone.
+     *
+     * @param varName the variable name for error reporting
+     * @throws EcmaError ReferenceError always
+     */
+    public static void throwTDZError(String varName) {
+        throw referenceErrorById("msg.tdz.access", varName);
+    }
+
     private static void warnAboutNonJSObject(Object nonJSObject) {
         final String omitParam = ScriptRuntime.getMessageById("params.omit.non.js.object.warning");
         if (!"true".equals(omitParam)) {
