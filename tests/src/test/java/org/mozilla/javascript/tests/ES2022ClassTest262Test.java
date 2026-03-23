@@ -17,7 +17,6 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -58,24 +57,21 @@ import org.mozilla.javascript.typedarrays.NativeArrayBuffer;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.error.YAMLException;
 
+/**
+ * Dedicated test class for ES2022 class-related Test262 tests. This runs only the class-related
+ * tests from: - language/statements/class - language/expressions/class -
+ * built-ins/ClassStaticBlockDefinition - built-ins/ClassStringLookup
+ */
 @Execution(ExecutionMode.CONCURRENT)
-public class Test262SuiteTest {
+public class ES2022ClassTest262Test {
 
-    /**
-     * The test source code must not be modified in any way, and the test must be executed just once
-     * (in non-strict mode, only).
-     */
     private static final String FLAG_RAW = "raw";
-
-    /** The test must be executed just once--in strict mode, only. */
     private static final String FLAG_ONLY_STRICT = "onlyStrict";
-
-    /** The test must be executed just once--in non-strict mode, only. */
     private static final String FLAG_NO_STRICT = "noStrict";
 
     private static final File testDir = new File("test262/test");
     private static final String testHarnessDir = "test262/harness/";
-    private static final String testProperties;
+    private static final String testProperties = "testsrc/test262-class.properties";
 
     private static final boolean updateTest262Properties;
     private static final boolean rollUpEnabled;
@@ -91,11 +87,11 @@ public class Test262SuiteTest {
                     if (Context.FEATURE_INTL_402 == featureIndex) {
                         return true;
                     }
-
                     return super.hasFeature(cx, featureIndex);
                 }
             };
 
+    // ES2022 class features are supported - only exclude truly unsupported features
     static final Set<String> UNSUPPORTED_FEATURES =
             new HashSet<>(
                     Arrays.asList(
@@ -103,10 +99,6 @@ public class Test262SuiteTest {
                             "IsHTMLDDA",
                             "async-functions",
                             "async-iteration",
-                            // ES2022 class features are now supported
-                            // "class",
-                            // "class-fields-private",
-                            // "class-fields-public",
                             "new.target",
                             "SharedArrayBuffer",
                             "tail-call-optimization",
@@ -114,11 +106,15 @@ public class Test262SuiteTest {
                             "upsert",
                             "u180e"));
 
-    static {
-        String propFile = System.getProperty("test262properties");
-        testProperties =
-                propFile != null && !propFile.equals("") ? propFile : "testsrc/test262.properties";
+    // Class-specific test directories
+    private static final String[] CLASS_TEST_DIRS = {
+        "language/expressions/class",
+        "language/statements/class",
+        "built-ins/ClassStaticBlockDefinition",
+        "built-ins/ClassStringLookup"
+    };
 
+    static {
         String updateProps = System.getProperty("updateTest262properties");
 
         if (updateProps != null) {
@@ -166,7 +162,6 @@ public class Test262SuiteTest {
         }
 
         if (updateTest262Properties) {
-            // Regenerate .properties file
             Test262SuitePropertiesBuilder builder =
                     new Test262SuitePropertiesBuilder(testDir.toPath());
             for (Entry<Test262Case, TestResultTracker> entry : RESULT_TRACKERS.entrySet()) {
@@ -180,30 +175,12 @@ public class Test262SuiteTest {
         }
     }
 
-    /*
-     * Regex breakdown:
-     * Group 1:
-     * 	topLevel folder exclusion marker - ~
-     *  OR
-     *  comment marker: optional whitespace + (! OR #) + optional whitespace - (?:\\s*)(?:!|#)(?:\\s*)
-     *  OR
-     *  preceding whitespace indicating subsolder/file: whitespace - \\s+
-     * Group 2:
-     * 	folder/filePath - (\\S+)
-     * Group 3 (non-capturing):
-     *  stats for directories (2/8 (25%)) OR failure info (strict OR non-strict OR non-interpreted OR {...}) for .js files >
-     * Group 4
-     *  optionally comment
-     */
     private static final Pattern LINE_SPLITTER =
             Pattern.compile(
                     "(~|(?:\\s*)(?:!|#)(?:\\s*)|\\s+)?(\\S+)(?:[^\\S\\r\\n]+"
                             + "(?:strict|non-strict|compiled-strict|compiled-non-strict|interpreted-strict|interpreted-non-strict|compiled|interpreted|"
                             + "\\d+/\\d+ \\(\\d+(?:\\.\\d+)?%%\\)|\\{(?:non-strict|strict|unsupported): \\[.*\\],?\\}))?[^\\S\\r\\n]*(.*)");
 
-    /**
-     * @see https://github.com/tc39/test262/blob/main/INTERPRETING.md#host-defined-functions
-     */
     public static class $262 extends ScriptableObject {
 
         $262() {
@@ -297,7 +274,6 @@ public class Test262SuiteTest {
                                 String harnessPath = testHarnessDir + harnessFile;
                                 try (Reader reader = new FileReader(harnessPath)) {
                                     String script = Kit.readReader(reader);
-
                                     return cx.compileString(script, harnessPath, 1, null);
                                 } catch (IOException ioe) {
                                     throw new RuntimeException(
@@ -314,8 +290,6 @@ public class Test262SuiteTest {
 
     private static String extractJSErrorName(RhinoException ex) {
         if (ex instanceof EvaluatorException) {
-            // there's no universal format to EvaluatorException's
-            // for now, just assume that it's a SyntaxError
             return "SyntaxError";
         }
 
@@ -327,8 +301,8 @@ public class Test262SuiteTest {
     }
 
     @ParameterizedTest
-    @MethodSource("test262SuiteValues")
-    public void test262Case(
+    @MethodSource("classTestValues")
+    public void test262ClassCase(
             String testFilePath,
             TestMode testMode,
             boolean useStrict,
@@ -336,7 +310,6 @@ public class Test262SuiteTest {
             boolean markedAsFailing) {
         try (Context cx = Context.enter()) {
             cx.setInterpretedMode(testMode == TestMode.INTERPRETED);
-            // Ensure maximum compatibility, including future strict mode and "const" checks
             cx.setLanguageVersion(Context.VERSION_ECMASCRIPT);
             cx.setGeneratingDebug(true);
 
@@ -353,7 +326,7 @@ public class Test262SuiteTest {
                 failedEarly = true;
                 Script caseScript = cx.compileString(str, testFilePath, line, null);
 
-                failedEarly = false; // not after this line
+                failedEarly = false;
                 caseScript.exec(cx, scope, scope);
 
                 if (testCase.isNegative()) {
@@ -403,19 +376,10 @@ public class Test262SuiteTest {
                     }
                 }
             } catch (RuntimeException ex) {
-                // enable line below to print out stacktraces of unexpected exceptions
-                // disabled for now because too many exceptions are throw
-                // Unexpected non-Rhino-Exception here, so print the exception so it stands out
-                // ex.printStackTrace();
-
-                // Ignore the failed assertion if the test is marked as failing
                 if (markedAsFailing) return;
-
                 throw ex;
             } catch (AssertionError ex) {
-                // Ignore the failed assertion if the test is marked as failing
                 if (markedAsFailing) return;
-
                 throw ex;
             }
         }
@@ -423,28 +387,38 @@ public class Test262SuiteTest {
 
     private static void addTestFiles(List<File> testFiles, Map<File, String> filesExpectedToFail)
             throws IOException {
-        List<File> topLevelFolderContents = new LinkedList<File>();
-        Map<String, File> fileLookup = new HashMap<>();
-        File topLevelFolder = null;
-        boolean excludeTopLevelFolder = false;
+        // Add all class-related test directories
+        for (String classDir : CLASS_TEST_DIRS) {
+            File dir = new File(testDir, classDir);
+            if (dir.exists() && dir.isDirectory()) {
+                List<File> files = new LinkedList<>();
+                recursiveListFilesHelper(dir, JS_FILE_FILTER, files);
+                testFiles.addAll(files);
+            }
+        }
 
+        // Parse the properties file for expected failures
+        File propsFile = new File(testProperties);
+        if (propsFile.exists()) {
+            parsePropertiesFile(propsFile, testFiles, filesExpectedToFail);
+        }
+    }
+
+    private static void parsePropertiesFile(
+            File propsFile, List<File> testFiles, Map<File, String> filesExpectedToFail)
+            throws IOException {
         int lineNo = 0;
         String line;
         String path;
         String comment;
 
-        try (Scanner scanner = new Scanner(new File(testProperties))) {
+        try (Scanner scanner = new Scanner(propsFile)) {
             while (scanner.hasNextLine()) {
                 line = scanner.nextLine();
                 Matcher splitLine = LINE_SPLITTER.matcher(line);
                 lineNo++;
 
                 if (!splitLine.matches()) {
-                    if (line.length() > 0) {
-                        System.err.format(
-                                "WARN: Unexpected content '%s' at line #%d%n", line, lineNo);
-                    }
-
                     continue;
                 }
 
@@ -452,129 +426,28 @@ public class Test262SuiteTest {
                 comment = splitLine.group(3);
 
                 if (splitLine.group(1) == null || splitLine.group(1).equals("~")) {
-                    // apparent topLevel folder match
-
-                    topLevelFolder = new File(testDir, path);
-
-                    if (!topLevelFolder.exists()) {
-                        throw new RuntimeException(
-                                "Non-existing '" + path + "' at the line #" + lineNo);
-                    } else if (!topLevelFolder.isDirectory()) {
-                        throw new RuntimeException(
-                                "Unexpected file '"
-                                        + path
-                                        + "' at the top level at the line #"
-                                        + lineNo);
-                    }
-
-                    excludeTopLevelFolder =
-                            splitLine.group(1) != null && splitLine.group(1).equals("~");
-
-                    topLevelFolderContents.clear();
-                    recursiveListFilesHelper(
-                            topLevelFolder, JS_FILE_FILTER, topLevelFolderContents);
-                    fileLookup.clear();
-                    for (File file : topLevelFolderContents) {
-                        fileLookup.put(
-                                topLevelFolder
-                                        .toPath()
-                                        .relativize(file.toPath())
-                                        .toString()
-                                        .replaceAll("\\\\", "/"),
-                                file);
-                    }
-
-                    if (updateTest262Properties) {
-                        // Make sure files are always sorted the same way, alphabetically, with
-                        // subdirectories first
-                        // as to make sure that the output is stable when (re)generating the
-                        // test262.properties file
-                        topLevelFolderContents.sort(
-                                (f1, f2) -> { // return -1: before, 0: equal, 1: after
-                                    String p1 = f1.getParent();
-                                    String p2 = f2.getParent();
-
-                                    // making sure files come after subdirectories
-                                    if (!p1.equals(p2)
-                                            && (p1.startsWith(p2) || p2.startsWith(p1))) {
-                                        return p1.startsWith(p2) ? -1 : 1;
-                                    }
-
-                                    return f1.toString()
-                                            .replaceFirst("\\.js$", "")
-                                            .compareToIgnoreCase(
-                                                    f2.toString().replaceFirst("\\.js$", ""));
-                                });
-                    }
-
-                    if (excludeTopLevelFolder) {
-                        // Adding just the folder itself, needed when regenerating the .properties
-                        // file
-                        testFiles.add(topLevelFolder);
-                        filesExpectedToFail.put(topLevelFolder, comment);
-                    } else {
-                        testFiles.addAll(topLevelFolderContents);
-                    }
-
+                    // Directory entry - skip for now
                     continue;
                 } else if (splitLine.group(1).trim().length() > 0) {
-                    // comments
-
+                    // Comments
                     continue;
-                } else if (topLevelFolder == null) {
-                    throw new RuntimeException(
-                            "Gotten to file '"
-                                    + splitLine.group(2)
-                                    + "' at the line #"
-                                    + lineNo
-                                    + " without encountering a top level");
                 }
 
-                // Now onto the files and folders listed under the topLevel folder
                 if (path.endsWith(".js")) {
-                    File file = fileLookup.get(path);
-                    if (file != null) {
+                    File file = new File(testDir, path);
+                    if (file.exists()) {
                         filesExpectedToFail.put(file, comment);
-                        if (excludeTopLevelFolder) {
-                            /* adding paths listed in the .properties file under the topLevel folder marked to skip
-                             * to testFiles, in order to be able to not loose then when regenerate the .properties file
-                             *
-                             * Want to keep track of these files as they apparently failed at the time when the directory was marked to be skipped
-                             */
-                            testFiles.add(file);
-                        }
-                    } else {
-                        System.err.format(
-                                "WARN: Exclusion '%s' at line #%d doesn't exclude anything%n",
-                                path, lineNo);
                     }
-                } else {
-                    File subFolder = new File(topLevelFolder, path);
-
-                    if (!subFolder.exists()) {
-                        System.err.format(
-                                "WARN: Exclusion '%s' at line #%d doesn't exclude anything%n",
-                                path, lineNo);
-                    }
-
-                    topLevelFolderContents.stream()
-                            .forEach(
-                                    file -> {
-                                        if (file.toPath().getParent().equals(subFolder.toPath())) {
-                                            filesExpectedToFail.put(file, null);
-                                        }
-                                    });
                 }
             }
         }
     }
 
-    public static Collection<Object[]> test262SuiteValues() throws IOException {
+    public static Collection<Object[]> classTestValues() throws IOException {
         List<Object[]> result = new ArrayList<>();
-        File skipDir = null;
 
-        List<File> testFiles = new LinkedList<File>();
-        Map<File, String> failingFiles = new HashMap<File, String>();
+        List<File> testFiles = new LinkedList<>();
+        Map<File, String> failingFiles = new HashMap<>();
         addTestFiles(testFiles, failingFiles);
 
         fileLoop:
@@ -582,22 +455,6 @@ public class Test262SuiteTest {
             String caseShortPath = testDir.toPath().relativize(testFile.toPath()).toString();
             boolean markedAsFailing = failingFiles.containsKey(testFile);
             String comment = markedAsFailing ? failingFiles.get(testFile) : null;
-
-            // add dummy tracker, just in case the .properties file needs to be (re)generated
-            if (testFile.isDirectory()) skipDir = testFile;
-
-            if (skipDir != null) {
-                if (!testFile.toPath().startsWith(skipDir.toPath())) {
-                    skipDir = null;
-                } else {
-                    TestResultTracker tracker =
-                            RESULT_TRACKERS.computeIfAbsent(
-                                    new Test262Case(testFile, null, null, null, false, null, null),
-                                    k -> new TestResultTracker(comment));
-                    tracker.setExpectations(TestMode.SKIPPED, true, false, false, true);
-                    continue;
-                }
-            }
 
             Test262Case testCase;
             try {
@@ -607,9 +464,7 @@ public class Test262SuiteTest {
                         "Error while parsing metadata of " + testFile.getPath(), ex);
             }
 
-            // all the reasons not to execute this file
-            // even if it's not excluded in the config:
-            // 1. it requires/tests unsupported features
+            // Check for unsupported features
             for (String feature : testCase.features) {
                 if (UNSUPPORTED_FEATURES.contains(feature)) {
                     if (includeUnsupported) {
@@ -623,11 +478,11 @@ public class Test262SuiteTest {
                                 testCase.hasFlag(FLAG_NO_STRICT),
                                 true);
                     }
-
                     continue fileLoop;
                 }
             }
-            // 2. it runs in an unsupported environment
+
+            // Skip module and async tests
             if (testCase.hasFlag("module") || testCase.hasFlag("async")) {
                 if (includeUnsupported) {
                     TestResultTracker tracker =
@@ -640,7 +495,6 @@ public class Test262SuiteTest {
                             testCase.hasFlag(FLAG_NO_STRICT),
                             true);
                 }
-
                 continue;
             }
 
@@ -686,10 +540,8 @@ public class Test262SuiteTest {
 
         private final File file;
         private final String source;
-
         private final String expectedError;
         private final boolean hasEarlyError;
-
         private final Set<String> flags;
         private final List<String> harnessFiles;
         private final Set<String> features;
@@ -702,7 +554,6 @@ public class Test262SuiteTest {
                 boolean hasEarlyError,
                 Set<String> flags,
                 Set<String> features) {
-
             this.file = file;
             this.source = source;
             this.harnessFiles = harnessFiles;
@@ -759,18 +610,11 @@ public class Test262SuiteTest {
                 features.addAll((Collection<String>) metadata.get("features"));
             }
 
-            if (flags.contains(FLAG_RAW) && metadata.containsKey("includes")) {
-                System.err.format(
-                        "WARN: case '%s' is flagged as 'raw' but also has defined includes%n",
-                        testFile.getPath());
-            } else {
-                // present by default harness files
-                harnessFiles.add("assert.js");
-                harnessFiles.add("sta.js");
+            harnessFiles.add("assert.js");
+            harnessFiles.add("sta.js");
 
-                if (metadata.containsKey("includes")) {
-                    harnessFiles.addAll((List<String>) metadata.get("includes"));
-                }
+            if (metadata.containsKey("includes")) {
+                harnessFiles.addAll((List<String>) metadata.get("includes"));
             }
 
             return new Test262Case(
@@ -805,7 +649,6 @@ public class Test262SuiteTest {
                 boolean onlyStrict,
                 boolean noStrict,
                 boolean expectedFailure) {
-
             modes.add(makeKey(mode, useStrict));
             this.onlyStrict = onlyStrict;
             this.noStrict = noStrict;
@@ -821,12 +664,10 @@ public class Test262SuiteTest {
         }
 
         public String getResult(Test262Case tc) {
-            // success on all optLevels in both strict and non-strict mode
             if (modes.isEmpty()) {
                 return null;
             }
 
-            // Test skipped due to dependencies on unsupported features/environment
             if (modes.contains("skipped-strict")) {
                 List<String> feats = new ArrayList<>();
 
@@ -849,12 +690,10 @@ public class Test262SuiteTest {
                 return "{unsupported: " + Arrays.toString(feats.toArray()) + "}";
             }
 
-            // failure on all optLevels in both strict and non-strict mode
             if (modes.size() == 4) {
                 return "";
             }
 
-            // simplify the output for some cases
             ArrayList<String> res = new ArrayList<>(modes);
             if (res.contains("compiled-non-strict") && res.contains("interpreted-non-strict")) {
                 res.remove("compiled-non-strict");
@@ -893,9 +732,7 @@ public class Test262SuiteTest {
             rootNode = new DirectoryNode(Path.of(""));
         }
 
-        void addTest(
-                Test262SuiteTest.Test262Case testCase,
-                Test262SuiteTest.TestResultTracker resultTracker) {
+        void addTest(Test262Case testCase, TestResultTracker resultTracker) {
             Path testFilePath = testDir.relativize(testCase.file.toPath());
             if (testCase.file.isDirectory()) {
                 List<File> excludedFiles = new ArrayList<>();
@@ -914,8 +751,7 @@ public class Test262SuiteTest {
         }
 
         void write(Writer writer, boolean statsEnabled, boolean rollUpEnabled) throws IOException {
-            writer.write(
-                    "# This is a configuration file for Test262SuiteTest.java. See ./README.md for more info about this file\n");
+            writer.write("# Test262 ES2022 Class Tests Configuration\n");
             rootNode.writeChildNodes(writer, null, statsEnabled, rollUpEnabled, false);
         }
 
@@ -923,207 +759,163 @@ public class Test262SuiteTest {
                 Path testFilePath, Function<Path, Node> mappingFunction, boolean isFailure) {
             DirectoryNode parentNode = rootNode;
             Path nodePath = Path.of("");
-            int i = 0;
-            while (testFilePath.getNameCount() - 1 > i) {
-                nodePath = Paths.get(nodePath.toString(), testFilePath.getName(i).toString());
-                i++;
 
-                parentNode =
-                        (DirectoryNode)
-                                parentNode.computeIfAbsent(nodePath, (p) -> new DirectoryNode(p));
-                parentNode.deepCount(isFailure);
+            for (int i = 0; i < testFilePath.getNameCount() - 1; i++) {
+                nodePath = nodePath.resolve(testFilePath.getName(i));
+                DirectoryNode nextNode = parentNode.childNodes.get(nodePath.toString());
+                if (nextNode == null) {
+                    nextNode = new DirectoryNode(nodePath);
+                    parentNode.childNodes.put(nodePath.toString(), nextNode);
+                }
+                parentNode = nextNode;
             }
-            parentNode.computeIfAbsent(testFilePath, mappingFunction);
+
+            Path leafPath = testFilePath.getFileName();
+            Node leafNode = mappingFunction.apply(testFilePath);
+            parentNode.childNodes.put(leafPath.toString(), leafNode);
+
             return parentNode;
         }
     }
 
     private abstract static class Node {
-        static final String INDENT = "    ";
-        private Path path;
+        protected final Path path;
 
         Node(Path path) {
             this.path = path;
         }
 
-        Path getPath() {
-            return path;
-        }
-
         abstract void write(
-                Writer writer, DirectoryNode refParent, boolean statsEnabled, boolean rollUpEnabled)
+                Writer writer,
+                String prefix,
+                boolean statsEnabled,
+                boolean rollUpEnabled,
+                boolean skipDir)
                 throws IOException;
-
-        protected String buildRelativePath(Path parent, Path path) {
-            return normalizePath(parent.relativize(path));
-        }
-
-        protected String normalizePath(Path path) {
-            return path.toString().replace("\\", "/");
-        }
     }
 
     private static class DirectoryNode extends Node {
-        private LinkedHashMap<Path, Node> childNodes;
-        private long testDeepCount;
-        private long failureDeepCount;
-        private long testCount;
-        private long failureCount;
+        Map<String, Node> childNodes = new LinkedHashMap<>();
+        int total;
+        int failed;
 
         DirectoryNode(Path path) {
             super(path);
-            childNodes = new LinkedHashMap<>();
-        }
-
-        Node computeIfAbsent(Path path, Function<Path, Node> mappingFunction) {
-            return childNodes.computeIfAbsent(path, mappingFunction);
-        }
-
-        void deepCount(boolean isFailure) {
-            testDeepCount++;
-            if (isFailure) {
-                failureDeepCount++;
-            }
         }
 
         void count(boolean isFailure) {
-            testCount++;
+            total++;
             if (isFailure) {
-                failureCount++;
+                failed++;
             }
         }
 
-        @Override
-        void write(
-                Writer writer, DirectoryNode refParent, boolean statsEnabled, boolean rollUpEnabled)
-                throws IOException {
-            int pathNameCount = 1;
-            String normalizedPath = normalizePath(getPath());
-            if ("language/expressions".equals(normalizedPath)
-                    || "language/statements".equals(normalizedPath)) {
-                pathNameCount = 2;
-            }
-            if (refParent == null) {
-                if (testCount == 0
-                        && failureDeepCount > 0
-                        && getPath().getNameCount() == pathNameCount) {
-                    writeChildNodes(writer, null, statsEnabled, rollUpEnabled, false);
-                    return;
-                }
-
-                writer.write('\n');
-                writer.write(normalizePath(getPath()));
-                writer.write(statsText(statsEnabled, testDeepCount, failureDeepCount));
-                writer.write('\n');
-
-                writeChildNodes(writer, this, statsEnabled, rollUpEnabled, false);
-                return;
-            }
-
-            if (failureDeepCount == 0) {
-                return;
-            }
-
-            if (rollUpEnabled && testCount > 1 && failureCount == testCount) {
-                writer.write(INDENT);
-                writer.write(buildRelativePath(refParent.getPath(), getPath()));
-                writer.write(statsText(statsEnabled, testCount, failureCount));
-                writer.write('\n');
-
-                writeChildNodes(writer, refParent, statsEnabled, rollUpEnabled, true);
-                return;
-            }
-
-            writeChildNodes(writer, refParent, statsEnabled, rollUpEnabled, false);
-        }
-
-        private void writeChildNodes(
+        void writeChildNodes(
                 Writer writer,
-                DirectoryNode refParent,
+                String prefix,
                 boolean statsEnabled,
                 boolean rollUpEnabled,
-                boolean onlyDirectories)
+                boolean skipDir)
                 throws IOException {
-            for (Node node : childNodes.values()) {
-                if (!onlyDirectories || node instanceof DirectoryNode) {
-                    node.write(writer, refParent, statsEnabled, rollUpEnabled);
-                }
+            List<Node> sortedNodes = new ArrayList<>(childNodes.values());
+            sortedNodes.sort(
+                    (n1, n2) -> {
+                        boolean n1IsDir = n1 instanceof DirectoryNode;
+                        boolean n2IsDir = n2 instanceof DirectoryNode;
+                        if (n1IsDir && !n2IsDir) return -1;
+                        if (!n1IsDir && n2IsDir) return 1;
+                        return n1.path
+                                .toString()
+                                .replaceFirst("\\.js$", "")
+                                .compareToIgnoreCase(n2.path.toString().replaceFirst("\\.js$", ""));
+                    });
+
+            for (Node node : sortedNodes) {
+                node.write(writer, prefix, statsEnabled, rollUpEnabled, skipDir);
             }
-        }
-
-        static String statsText(boolean statsEnabled, long tests, long failures) {
-            if (!statsEnabled) {
-                return "";
-            }
-
-            String output = " " + failures + "/" + tests;
-            if (failures == tests) {
-                return output + " (100.0%)";
-            }
-
-            double failurePercentage = 0d;
-            if (tests > 0) {
-                failurePercentage = failures * 100d / tests;
-                failurePercentage = Math.round(failurePercentage * 100) / 100d;
-            }
-
-            return output + " (" + failurePercentage + "%)";
-        }
-    }
-
-    private static final class ExcludeNode extends DirectoryNode {
-        long excludedFilesCount;
-
-        ExcludeNode(Path path, int excludedFilesCount) {
-            super(path);
-            this.excludedFilesCount = excludedFilesCount;
         }
 
         @Override
         void write(
-                Writer writer, DirectoryNode refParent, boolean statsEnabled, boolean rollUpEnabled)
+                Writer writer,
+                String prefix,
+                boolean statsEnabled,
+                boolean rollUpEnabled,
+                boolean skipDir)
                 throws IOException {
-            writer.write("\n~");
-            writer.write(normalizePath(getPath()));
-            writer.write(statsText(statsEnabled, excludedFilesCount, excludedFilesCount));
-            writer.write('\n');
+            String name = path.getFileName() != null ? path.getFileName().toString() : "";
+            String newPrefix = prefix == null ? name : prefix + "/" + name;
+
+            if (rollUpEnabled && failed == 0 && total > 0) {
+                writer.write(newPrefix);
+                if (statsEnabled) {
+                    writer.write(
+                            " " + failed + "/" + total + " (" + (100.0 * failed / total) + "%)");
+                }
+                writer.write("\n");
+                return;
+            }
+
+            if (skipDir) {
+                writer.write("~" + newPrefix);
+                if (statsEnabled) {
+                    writer.write(
+                            " " + failed + "/" + total + " (" + (100.0 * failed / total) + "%)");
+                }
+                writer.write("\n");
+            }
+
+            writeChildNodes(
+                    writer, newPrefix, statsEnabled, rollUpEnabled, skipDir && failed == total);
         }
     }
 
-    private static final class TestNode extends Node {
-        private Test262SuiteTest.Test262Case testCase;
-        private Test262SuiteTest.TestResultTracker resultTracker;
+    private static class TestNode extends Node {
+        Test262Case testCase;
+        TestResultTracker resultTracker;
 
-        TestNode(
-                Path path,
-                Test262SuiteTest.Test262Case testCase,
-                Test262SuiteTest.TestResultTracker resultTracker) {
+        TestNode(Path path, Test262Case testCase, TestResultTracker resultTracker) {
             super(path);
-
             this.testCase = testCase;
             this.resultTracker = resultTracker;
         }
 
         @Override
         void write(
-                Writer writer, DirectoryNode refParent, boolean statsEnabled, boolean rollUpEnabled)
+                Writer writer,
+                String prefix,
+                boolean statsEnabled,
+                boolean rollUpEnabled,
+                boolean skipDir)
                 throws IOException {
-            String testResult = resultTracker.getResult(testCase);
-            if (testResult == null) {
-                return;
+            String result = resultTracker.getResult(testCase);
+            if (result != null) {
+                writer.write(" " + path.toString());
+                if (!result.isEmpty()) {
+                    writer.write(" " + result);
+                }
+                writer.write("\n");
             }
+        }
+    }
 
-            writer.write(INDENT);
-            writer.write(buildRelativePath(refParent.getPath(), getPath()));
-            if (statsEnabled && !testResult.isEmpty()) {
-                writer.write(" ");
-                writer.write(testResult);
-            }
-            if (resultTracker.comment != null && !resultTracker.comment.isEmpty()) {
-                writer.write(" ");
-                writer.write(resultTracker.comment);
-            }
-            writer.write('\n');
+    private static class ExcludeNode extends Node {
+        int count;
+
+        ExcludeNode(Path path, int count) {
+            super(path);
+            this.count = count;
+        }
+
+        @Override
+        void write(
+                Writer writer,
+                String prefix,
+                boolean statsEnabled,
+                boolean rollUpEnabled,
+                boolean skipDir)
+                throws IOException {
+            // ExcludeNode is used for directories that are completely skipped
         }
     }
 }

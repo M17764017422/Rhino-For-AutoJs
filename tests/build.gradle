@@ -159,3 +159,44 @@ tasks.register('test262', Test) {
         }
     }
 }
+
+// Task to run only ES2022 class-related Test262 tests (~8k tests)
+tasks.register('test262Class', Test) {
+    description = 'Runs only ES2022 class-related Test262 tests'
+    group = 'verification'
+
+    useJUnitPlatform()
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    maxHeapSize = "1g"
+    forkEvery = 1
+    maxParallelForks = 64
+
+    systemProperty 'java.awt.headless', 'true'
+    systemProperty 'mozilla.js.tests', 'testsrc/tests'
+    systemProperty 'mozilla.js.tests.timeout', 60000
+
+    jvmArgs += ['--add-opens', 'java.desktop/javax.swing.table=ALL-UNNAMED']
+    jvmArgs += ['--add-opens', 'java.base/java.util=ALL-UNNAMED']
+    jvmArgs += ['--add-opens', 'java.base/java.lang=ALL-UNNAMED']
+
+    // Use the class-specific properties file
+    systemProperty 'test262properties', 'testsrc/test262-class.properties'
+    if (System.getProperty('updateTest262properties') != null) {
+        systemProperty 'updateTest262properties', System.getProperty('updateTest262properties')
+    }
+
+    // Include only ES2022 class test class
+    include '**/ES2022ClassTest262Test.class'
+
+    // Class tests need ~15 minutes for 8k+ tests
+    timeout = java.time.Duration.ofMinutes(20)
+
+    System.properties.each { k, v ->
+        if (k.startsWith("rhino.")) {
+            systemProperty k, v
+        }
+    }
+}
