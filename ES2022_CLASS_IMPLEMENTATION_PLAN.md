@@ -1,9 +1,9 @@
 # Rhino ES2022 Class 支持开发计划
 
-> 版本: 1.11
+> 版本: 1.12
 > 日期: 2026-03-23
 > 状态: 详细规划阶段
-> 变更说明: 基于探索报告 v1.0 完善，新增字节码指令规范、TDZ 实现、线程安全、优化编译器支持章节
+> 变更说明: v1.12 - 同时支持解释模式和优化模式，新增并行开发流程、自动降级机制、双模式验证方案
 
 ## 一、项目概述
 
@@ -5307,16 +5307,25 @@ public class NativeClass extends BaseFunction {
 
 ### 5.8 优化编译器支持（v1.11 新增）
 
-#### 5.8.1 分阶段实现策略
+#### 5.8.1 同时支持两种模式的实现策略
 
-根据代码探索发现，`optimizer/Codegen.java` 当前完全不支持类定义。
+根据代码探索发现，`optimizer/Codegen.java` 当前完全不支持类定义。为实现同时支持解释模式和优化模式，采用并行开发策略。
 
-| 阶段 | 优化级别 | 支持状态 | 实现内容 |
-|------|----------|----------|----------|
-| **第一阶段** | -1, -2 (解释模式) | ✅ 可用 | 仅实现 Token、Parser、Interpreter 支持 |
-| **第二阶段** | 0-9 (优化模式) | ❌ 待实现 | Codegen、BodyCodegen JVM 字节码生成 |
+| 模式 | 优化级别 | 支持状态 | 实现内容 | 开发阶段 |
+|------|----------|----------|----------|----------|
+| **解释模式** | -1, -2 | ✅ 可用 | Token、Parser、Interpreter 支持 | M0-M5 |
+| **优化模式** | 0-9 | ❌ 待实现 | Codegen、BodyCodegen JVM 字节码生成 | M8（与 M5 并行）|
 
-**推荐策略**：先完成第一阶段，确保基础功能可用后再处理优化器。
+**并行开发策略**：
+- M0-M4：解释模式核心实现（顺序执行）
+- M5 + M8：运行时支持与优化编译器支持并行开发
+- M6：统一测试验证两种模式
+
+**关键原则**：
+1. 解释模式优先验证语义正确性
+2. 优化模式复用解释模式的 IR 结构
+3. 双模式共享相同的测试用例
+4. 自动降级机制作为后备方案
 
 #### 5.8.2 第一阶段实现（解释模式）
 
@@ -5449,13 +5458,492 @@ private void transform(ScriptNode tree) {
 }
 ```
 
-#### 5.8.7 实现优先级
+#### 5.8.7 实现优先级（并行开发）
 
-| 优先级 | 任务 | 依赖 |
-|--------|------|------|
-| P0 | 第一阶段：解释模式支持 | 无 |
-| P1 | 自动降级机制 | P0 |
-| P2 | 第二阶段：优化模式支持 | P0, 测试通过 |
+| 优先级 | 任务 | 依赖 | 开发阶段 |
+|--------|------|------|----------|
+| P0 | 解释模式核心实现（Token、Parser、IRFactory） | 无 | M0-M4 |
+| P1 | 运行时支持（NativeClass、ScriptRuntime） | P0 | M5 |
+| P1 | 优化编译器支持（Codegen、BodyCodegen） | P0 | M8（与 M5 并行）|
+| P2 | 自动降级机制 | P1 | M8 |
+| P3 | 双模式验证测试 | P1, P1 | M6 |
+
+#### 5.8.8 同时支持两种模式的代码结构
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Class 实现代码结构                                 │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  AST 层（共享）                                                      │
+│  ├── ClassNode.java                                                 │
+│  ├── ClassElement.java                                              │
+│  └── Parser.java → parseClass()                                     │
+│                                                                     │
+│  IR 层（共享）                                                       │
+│  ├── IRFactory.java → transformClass()                              │
+│  └── Node.java → CLASS_NAME_PROP 等                                 │
+│                                                                     │
+│  ┌─────────────────────┐     ┌─────────────────────┐               │
+│  │    解释模式路径      │     │    优化模式路径      │               │
+│  │    (Interpreter)    │     │     (Codegen)       │               │
+│  ├─────────────────────┤     ├─────────────────────┤               │
+│  │ CodeGenerator.java  │     │ optimizer/          │               │
+│  │ ├── visitClass()    │     │ ├── Codegen.java    │               │
+│  │ └── Icode 指令      │     │ └── BodyCodegen.java│               │
+│  └─────────────────────┘     └─────────────────────┘               │
+│           ↓                           ↓                             │
+│  ┌─────────────────────────────────────────────────────┐           │
+│  │              运行时层（共享）                          │           │
+│  ├── NativeClass.java                                              │
+│  ├── UninitializedObject.java                                      │
+│  └── ScriptRuntime.java → createClass(), getPrivateField()         │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 5.9 并行开发流程图（v1.12 新增）
+
+#### 5.9.1 整体开发流程
+
+```
+时间轴
+  │
+  │  M0: Token 验证 + TDZ 原型
+  │  ├── Token.java: 新增 CLASS/EXTENDS 等
+  │  ├── UniqueTag.java: 新增 TDZ_VALUE
+  │  └── 验证测试通过
+  │
+  │  M1: AST 节点实现
+  │  ├── ClassNode.java
+  │  └── ClassElement.java
+  │
+  │  M2: TokenStream 词法分析
+  │  └── TokenStream.java: # 私有字段支持
+  │
+  │  M3: Parser 解析逻辑
+  │  └── Parser.java: parseClass*() 系列方法
+  │
+  │  M4: IRFactory 转换
+  │  └── IRFactory.java: transformClass()
+  │
+  ▼  ┌───────────────────────────────────────────────────────┐
+     │                  M5 + M8 并行开发                        │
+     ├───────────────────────────┬───────────────────────────┤
+     │      M5: 运行时支持        │     M8: 优化编译器支持      │
+     ├───────────────────────────┼───────────────────────────┤
+     │ NativeClass.java          │ CodeGenerator.java        │
+     │ UninitializedObject.java  │   ├── visitClass()        │
+     │ ScriptRuntime.createClass │   └── visitPrivateField() │
+     │ ScriptRuntime.getPrivate  │ optimizer/Codegen.java    │
+     │ BaseFunction.construct    │   └── generateClassCode() │
+     │                           │ BodyCodegen.java          │
+     │                           │   └── visitStatement()    │
+     └───────────────────────────┴───────────────────────────┘
+                        │
+                        ▼
+     ┌───────────────────────────────────────────────────────┐
+     │              共享测试验证                               │
+     │  ├── ClassTest.java (单元测试)                         │
+     │  ├── class.js (JS 脚本测试)                            │
+     │  └── test262 集成测试                                  │
+     └───────────────────────────────────────────────────────┘
+                        │
+                        ▼
+     ┌───────────────────────────────────────────────────────┐
+     │              M6: 测试与验证                             │
+     │  ├── 解释模式测试 (-1, -2)                             │
+     │  ├── 优化模式测试 (0-9)                                │
+     │  └── 双模式对比验证                                    │
+     └───────────────────────────────────────────────────────┘
+                        │
+                        ▼
+     ┌───────────────────────────────────────────────────────┐
+     │              M7: Bug 修复与完善                         │
+     └───────────────────────────────────────────────────────┘
+```
+
+#### 5.9.2 并行开发依赖关系
+
+```
+                    ┌─────────────┐
+                    │    M0-M4    │
+                    │  (顺序执行) │
+                    └──────┬──────┘
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+              ▼                         ▼
+     ┌─────────────────┐      ┌─────────────────┐
+     │       M5        │      │       M8        │
+     │   运行时支持     │◄────►│  优化编译器支持  │
+     │                 │  共享  │                 │
+     │ NativeClass     │  测试  │ Codegen        │
+     │ ScriptRuntime   │  用例  │ CodeGenerator  │
+     └────────┬────────┘      └────────┬────────┘
+              │                         │
+              └────────────┬────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │     M6      │
+                    │  测试验证   │
+                    └──────┬──────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │     M7      │
+                    │  Bug 修复   │
+                    └─────────────┘
+```
+
+#### 5.9.3 并行开发的同步点
+
+| 同步点 | 触发条件 | 同步内容 |
+|--------|----------|----------|
+| **SP1** | M4 完成 | IR 结构确认，M5/M8 可以开始 |
+| **SP2** | M5 完成 NativeClass | M8 可以开始生成类创建字节码 |
+| **SP3** | M5 完成 getPrivateField | M8 可以开始生成私有字段访问字节码 |
+| **SP4** | M8 完成 CodeGenerator | 可以开始双模式测试 |
+| **SP5** | M5 + M8 都完成 | 进入 M6 统一测试 |
+
+### 5.10 自动降级机制（v1.12 新增）
+
+#### 5.10.1 设计目标
+
+当优化模式遇到不支持的 class 特性时，自动降级到解释模式，保证代码可执行。
+
+#### 5.10.2 降级触发条件
+
+| 条件 | 触发时机 | 降级行为 |
+|------|----------|----------|
+| 检测到 class 定义 | 编译开始时 | 整个脚本降级到解释模式 |
+| 检测到私有字段 | 编译开始时 | 整个脚本降级到解释模式 |
+| 检测到静态块 | 编译开始时 | 整个脚本降级到解释模式 |
+| 优化级别 > 0 且有 class | 编译开始时 | 警告并降级 |
+
+#### 5.10.3 Codegen.java 自动降级实现
+
+```java
+// optimizer/Codegen.java
+
+/**
+ * 检查脚本是否需要降级到解释模式。
+ * 在 transform() 开始时调用。
+ * 
+ * @param tree 脚本 AST
+ * @return true 如果需要降级
+ */
+private boolean checkAndDowngradeIfNeeded(ScriptNode tree) {
+    // 检查优化级别
+    int optLevel = compilerEnv.getOptimizationLevel();
+    if (optLevel < 0) {
+        // 已经是解释模式，无需降级
+        return false;
+    }
+    
+    // 检查是否包含类定义
+    ClassDefinitionInfo classInfo = detectClassDefinitions(tree);
+    if (classInfo.hasClassDefinition) {
+        // 记录降级日志
+        if (compilerEnv.isGenerateDebugInfo()) {
+            System.err.println(
+                "[Rhino] Warning: Class definition detected in optimization mode.\n" +
+                "[Rhino] Class features: " + classInfo.features + "\n" +
+                "[Rhino] Falling back to interpreted mode for correct semantics.\n" +
+                "[Rhino] To suppress this warning, use Context.setOptimizationLevel(-1)");
+        }
+        
+        // 强制降级到解释模式
+        compilerEnv.setOptimizationLevel(-1);
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * 检测脚本中的类定义信息
+ */
+private static class ClassDefinitionInfo {
+    boolean hasClassDefinition;
+    boolean hasPrivateFields;
+    boolean hasStaticBlocks;
+    boolean hasSuperCall;
+    String features;
+    
+    void addFeature(String feature) {
+        if (features == null) {
+            features = feature;
+        } else {
+            features += ", " + feature;
+        }
+    }
+}
+
+private ClassDefinitionInfo detectClassDefinitions(Node node) {
+    ClassDefinitionInfo info = new ClassDefinitionInfo();
+    detectClassDefinitions_r(node, info);
+    return info;
+}
+
+private void detectClassDefinitions_r(Node node, ClassDefinitionInfo info) {
+    int type = node.getType();
+    
+    if (type == Token.CLASS) {
+        info.hasClassDefinition = true;
+        info.addFeature("class");
+    }
+    
+    if (type == Token.PRIVATE_FIELD || type == Token.GET_PRIVATE_FIELD) {
+        info.hasPrivateFields = true;
+        info.addFeature("private-field");
+    }
+    
+    if (type == Token.STATIC_BLOCK) {
+        info.hasStaticBlocks = true;
+        info.addFeature("static-block");
+    }
+    
+    // 递归检查子节点
+    for (Node child = node.getFirstChild(); child != null; child = child.getNext()) {
+        detectClassDefinitions_r(child, info);
+    }
+}
+```
+
+#### 5.10.4 降级对用户的影响
+
+| 场景 | 用户可见行为 | 性能影响 |
+|------|--------------|----------|
+| 纯 ES5 代码 | 无变化 | 无影响 |
+| ES6 class（优化模式） | 警告日志 + 降级 | 可能变慢 |
+| ES6 class（解释模式） | 无变化 | 无影响 |
+| 混合代码（含 class） | 整体降级 | 非类代码也变慢 |
+
+#### 5.10.5 用户控制选项
+
+```java
+// 用户可以通过以下方式控制降级行为
+
+// 方式 1：显式使用解释模式
+Context cx = Context.enter();
+cx.setOptimizationLevel(-1);  // 无警告
+
+// 方式 2：允许优化模式失败抛异常
+cx.setClassOptimizationFallback(false);  // 新增选项
+// 此选项为 false 时，遇到 class 定义会抛出异常而非降级
+
+// 方式 3：查询当前是否降级
+boolean isDowngraded = cx.isOptimizationDowngraded();
+```
+
+### 5.11 双模式验证方案（v1.12 新增）
+
+#### 5.11.1 验证目标
+
+确保解释模式和优化模式对 class 语法的执行结果完全一致。
+
+#### 5.11.2 验证矩阵
+
+| 验证项 | 解释模式 (-1) | 优化模式 (9) | 验证方法 |
+|--------|---------------|--------------|----------|
+| 基础 class 声明 | ✅ | ⚠️ 待验证 | 比较执行结果 |
+| class 表达式 | ✅ | ⚠️ 待验证 | 比较执行结果 |
+| constructor | ✅ | ⚠️ 待验证 | 比较实例属性 |
+| 方法（实例/静态） | ✅ | ⚠️ 待验证 | 比较返回值 |
+| getter/setter | ✅ | ⚠️ 待验证 | 比较属性访问 |
+| extends 继承 | ✅ | ⚠️ 待验证 | 比较 instanceof |
+| super() 调用 | ✅ | ⚠️ 待验证 | 比较父类构造 |
+| super 属性访问 | ✅ | ⚠️ 待验证 | 比较属性值 |
+| 公有字段 | ✅ | ⚠️ 待验证 | 比较字段值 |
+| 私有字段 | ✅ | ⚠️ 待验证 | 比较私有值 |
+| 私有方法 | ✅ | ⚠️ 待验证 | 比较方法结果 |
+| 静态块 | ✅ | ⚠️ 待验证 | 比较副作用 |
+| new.target | ✅ | ⚠️ 待验证 | 比较 new.target 值 |
+
+#### 5.11.3 自动化验证脚本
+
+```java
+// tests/src/test/java/org/mozilla/javascript/tests/es2022/DualModeVerificationTest.java
+
+package org.mozilla.javascript.tests.es2022;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.Scriptable;
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * 双模式验证测试：确保解释模式和优化模式执行结果一致
+ */
+public class DualModeVerificationTest {
+    
+    /**
+     * 在两种模式下执行相同代码并比较结果
+     */
+    private void assertDualModeEquals(String code, Object expected) {
+        // 解释模式执行
+        Object interpretedResult = executeWithOptLevel(code, -1);
+        // 优化模式执行
+        Object optimizedResult = executeWithOptLevel(code, 9);
+        
+        // 验证两种模式结果一致
+        assertEquals(interpretedResult, optimizedResult, 
+            "Interpreted and optimized modes should produce same result");
+        
+        // 验证结果符合预期
+        assertEquals(expected, interpretedResult);
+    }
+    
+    private Object executeWithOptLevel(String code, int optLevel) {
+        Context cx = Context.enter();
+        try {
+            cx.setOptimizationLevel(optLevel);
+            Scriptable scope = cx.initStandardObjects();
+            return cx.evaluateString(scope, code, "test", 1, null);
+        } finally {
+            Context.exit();
+        }
+    }
+    
+    // ===== 基础 class 测试 =====
+    
+    @Test
+    public void testBasicClassDeclaration() {
+        assertDualModeEquals(
+            "class A {} typeof A",
+            "function"
+        );
+    }
+    
+    @Test
+    public void testClassConstructor() {
+        assertDualModeEquals(
+            "class B { constructor(x) { this.x = x; } }" +
+            "var b = new B(42); b.x",
+            42.0
+        );
+    }
+    
+    @Test
+    public void testClassMethod() {
+        assertDualModeEquals(
+            "class C { method() { return 42; } }" +
+            "new C().method()",
+            42.0
+        );
+    }
+    
+    // ===== 继承测试 =====
+    
+    @Test
+    public void testBasicInheritance() {
+        assertDualModeEquals(
+            "class Parent { getValue() { return 'parent'; } }" +
+            "class Child extends Parent {}" +
+            "new Child().getValue()",
+            "parent"
+        );
+    }
+    
+    @Test
+    public void testSuperMethodCall() {
+        assertDualModeEquals(
+            "class Parent { method() { return 'parent'; } }" +
+            "class Child extends Parent { method() { return super.method() + '-child'; } }" +
+            "new Child().method()",
+            "parent-child"
+        );
+    }
+    
+    @Test
+    public void testSuperConstructorCall() {
+        assertDualModeEquals(
+            "class Parent { constructor(x) { this.x = x; } }" +
+            "class Child extends Parent { constructor(x, y) { super(x); this.y = y; } }" +
+            "var c = new Child(1, 2); c.x + ',' + c.y",
+            "1,2"
+        );
+    }
+    
+    // ===== 私有字段测试 =====
+    
+    @Test
+    public void testPrivateField() {
+        assertDualModeEquals(
+            "class D {" +
+            "  #secret = 42;" +
+            "  getSecret() { return this.#secret; }" +
+            "}" +
+            "new D().getSecret()",
+            42.0
+        );
+    }
+    
+    @Test
+    public void testPrivateMethod() {
+        assertDualModeEquals(
+            "class E {" +
+            "  #privateMethod(a, b) { return a + b; }" +
+            "  publicMethod(a, b) { return this.#privateMethod(a, b); }" +
+            "}" +
+            "new E().publicMethod(2, 3)",
+            5.0
+        );
+    }
+    
+    // ===== 静态块测试 =====
+    
+    @Test
+    public void testStaticBlock() {
+        assertDualModeEquals(
+            "var executed = false;" +
+            "class F { static { executed = true; } }" +
+            "executed",
+            true
+        );
+    }
+}
+```
+
+#### 5.11.4 test262 双模式验证
+
+```bash
+# 运行 test262 class 测试（解释模式）
+./gradlew :tests:test262 \
+    -Dtest262.filter=language/statements/class,language/expressions/class \
+    -Dtest262.optLevel=-1
+
+# 运行 test262 class 测试（优化模式）
+./gradlew :tests:test262 \
+    -Dtest262.filter=language/statements/class,language/expressions/class \
+    -Dtest262.optLevel=9
+
+# 比较两种模式的通过率
+# 期望：两种模式的通过率应该一致
+```
+
+#### 5.11.5 验证检查表
+
+| 检查项 | 检查方法 | 预期结果 |
+|--------|----------|----------|
+| 解释模式基础测试通过 | `./gradlew test --tests "*ClassTest*"` | 100% 通过 |
+| 优化模式基础测试通过 | `setOptimizationLevel(9)` 运行相同测试 | 100% 通过 |
+| 双模式结果一致性 | DualModeVerificationTest | 全部断言通过 |
+| test262 解释模式通过率 | 上述命令 | > 95% |
+| test262 优化模式通过率 | 上述命令 | 与解释模式一致 |
+| 性能基准测试 | JMH 或手动计时 | 优化模式 >= 解释模式 |
+
+#### 5.11.6 已知差异与处理
+
+| 差异类型 | 原因 | 处理方式 |
+|----------|------|----------|
+| 调试信息行号 | 编译后代码行号映射不同 | 可接受，不影响执行 |
+| 异常堆栈深度 | 优化可能内联函数 | 可接受，不影响语义 |
+| 属性枚举顺序 | 不同实现可能有差异 | 需验证，如发现需修复 |
+| 性能差异 | 解释模式较慢 | 可接受，语义正确即可 |
 
 ## 七、测试用例
 
@@ -6921,30 +7409,42 @@ public class ClassTest {
 
 ### 8.1 里程碑概览
 
-| 里程碑 | 内容 | 预估时间 | 依赖 |
-|--------|------|----------|------|
-| **M0** | 基础设施（Token 定义 + TDZ 框架原型验证） | 2 天 | 无 |
-| **M1** | Token + AST 节点 (ClassNode, ClassElement) | 3 天 | M0 |
-| **M2** | TokenStream 词法分析器修改（# 私有字段支持） | 1 天 | M1 |
-| **M3** | Parser 解析逻辑 (classDefinition, parseClassBody, parseClassElement) | 5 天 | M2 |
-| **M4** | IRFactory 转换逻辑 (transformClass, 字段注入) | 4 天 | M3 |
-| **M5** | 运行时支持 (NativeClass, ScriptRuntime.createClass) | 4 天 | M4 |
-| **M6** | 单元测试 + test262 class 相关用例验证 | 4 天 | M5 |
-| **M7** | Bug 修复 + 边界情况处理 | 3 天 | M6 |
-| **M8** | 优化编译器支持（第二阶段） | 3 天 | M5 |
-| **总计** | | **29 天** | |
+| 里程碑 | 内容 | 预估时间 | 依赖 | 开发模式 |
+|--------|------|----------|------|----------|
+| **M0** | 基础设施（Token 定义 + TDZ 框架原型验证） | 2 天 | 无 | 顺序 |
+| **M1** | Token + AST 节点 (ClassNode, ClassElement) | 3 天 | M0 | 顺序 |
+| **M2** | TokenStream 词法分析器修改（# 私有字段支持） | 1 天 | M1 | 顺序 |
+| **M3** | Parser 解析逻辑 (classDefinition, parseClassBody, parseClassElement) | 5 天 | M2 | 顺序 |
+| **M4** | IRFactory 转换逻辑 (transformClass, 字段注入) | 4 天 | M3 | 顺序 |
+| **M5** | 运行时支持 (NativeClass, ScriptRuntime.createClass) | 4 天 | M4 | **并行** |
+| **M8** | 优化编译器支持 (Codegen, CodeGenerator, 自动降级) | 3 天 | M4 | **并行** |
+| **M6** | 单元测试 + test262 class 相关用例验证（双模式） | 5 天 | M5, M8 | 顺序 |
+| **M7** | Bug 修复 + 边界情况处理 | 3 天 | M6 | 顺序 |
+| **总计** | | **31 天** | | |
 
-#### 8.1.1 里程碑说明（v1.11 更新）
+#### 8.1.1 里程碑说明（v1.12 更新）
 
-**M0（新增）**：在正式开发前完成 Token 定义验证和 TDZ 框架原型。
+**M0（基础设施）**：在正式开发前完成 Token 定义验证和 TDZ 框架原型。
 - 确认 Token 值分配不冲突
 - 实现 `UniqueTag.TDZ_VALUE` 原型
 - 验证 let/const TDZ 行为
 
-**M8（新增）**：优化编译器支持作为独立里程碑。
-- 第一阶段（M1-M7）：仅支持解释模式
-- 第二阶段（M8）：添加优化模式支持
-- 降低开发风险，允许分阶段交付
+**M5 + M8（并行开发）**：运行时支持与优化编译器并行开发。
+- **M5（运行时）**：NativeClass、UninitializedObject、ScriptRuntime.createClass
+- **M8（优化器）**：Codegen JVM 字节码生成、CodeGenerator 指令、自动降级机制
+- 两个里程碑共享测试用例，在同步点（SP2-SP4）协调进度
+- 并行开发可节省约 3 天时间
+
+**M6（双模式验证）**：测试需覆盖解释模式和优化模式。
+- 解释模式测试：`setOptimizationLevel(-1)`
+- 优化模式测试：`setOptimizationLevel(9)`
+- 双模式对比验证：确保两种模式结果一致
+
+**关键同步点**：
+- **SP1**：M4 完成，M5/M8 开始
+- **SP2**：M5 完成 NativeClass，M8 可生成类创建字节码
+- **SP3**：M5 完成 getPrivateField，M8 可生成私有字段访问字节码
+- **SP4**：M5 + M8 都完成，进入 M6
 
 ### 8.2 Git 提交任务列表
 
@@ -7025,26 +7525,31 @@ public class ClassTest {
 | super() 调用的正确性 | **高** | 派生类构造器语义复杂，super() 必须在 this 访问前调用 | 实现 UninitializedObject 追踪状态；参考 V8/SpiderMonkey 实现 |
 | 派生类构造器语义 | **高** | 默认构造器需自动调用 super(...args)；this 初始化顺序严格 | Parser 生成默认构造器时插入 super() 调用 |
 | super 属性访问 this 绑定 | **高** | super.method() 中 this 必须正确绑定到子类实例 | 使用现有 SUPER_PROPERTY_ACCESS 机制；设置 home object |
-| **优化编译器不支持** | **高** | 优化模式（级别 0-9）下类定义会失败 | 第一阶段仅支持解释模式；第二阶段实现优化器支持 |
+| **优化模式字节码生成** | **高** | Codegen 需要正确生成 JVM 字节码，与解释模式语义一致 | 并行开发；共享测试用例；双模式验证测试 |
+| **双模式执行结果不一致** | **高** | 解释模式和优化模式执行结果可能不同 | DualModeVerificationTest 自动化验证；test262 双模式运行 |
 | **TDZ 未实现** | **高** | 类声明提升行为不符合 ES 规范 | 新增 getVarWithTDZCheck() 方法；Parser 标记 TDZ 位置 |
 | 私有字段访问控制 | **中** | 只能在类内部访问；跨实例访问需要权限检查 | ConcurrentHashMap 存储；在 AST/IRFactory 双层检查访问权限 |
 | **私有字段线程安全** | **中** | WeakHashMap 非线程安全，多线程环境数据不一致 | 使用 ConcurrentHashMap 替代 WeakHashMap |
 | **序列化 brand 丢失** | **中** | 反序列化后 classBrand 变为新对象，私有字段访问失败 | 使用 UUID 字符串作为 classBrand |
+| **并行开发同步点** | **中** | M5 运行时和 M8 优化器需要协调进度 | 明确同步点 SP1-SP4；共享测试用例早期发现问题 |
+| **自动降级策略** | **中** | 降级可能影响性能；降级检测逻辑可能遗漏场景 | 完善检测逻辑；提供用户控制选项 |
 | 优化器兼容性 | **中** | 字段注入到构造器可能影响优化器假设 | 字段注入在 IR 转换阶段完成，优化器处理后端；使用现有 body.addChildToFront() 模式 |
 | 原型链设置 | **中** | ES6 类继承有两层原型链：实例原型链和构造器原型链 | NativeClass.setPrototype() 设置构造器原型链；prototype.setPrototype() 设置实例原型链 |
 | 静态块执行时机 | **低** | 静态块必须在类定义时立即执行 | IRFactory 在类定义处生成静态块执行代码 |
 | 与现有 super 支持冲突 | **低** | Rhino 已有 super 属性访问支持，需确保不冲突 | 复用现有 Token.SUPER、SUPER_PROPERTY_ACCESS 机制 |
 | test262 测试用例量大 | **低** | class 相关测试有 8000+ 个用例 | 分阶段启用；优先通过核心语义测试 |
 
-### 9.1.1 风险等级说明（v1.11 更新）
+### 9.1.1 风险等级说明（v1.12 更新）
 
 **高等级风险**：
 - 必须在开发前充分评估，否则可能导致重大返工
 - 需要专项测试用例覆盖
+- **新增**：优化模式相关风险需要双模式验证
 
 **中等级风险**：
 - 影响特定场景或边界情况
 - 有现成解决方案可参考
+- **新增**：并行开发同步风险需明确同步点
 
 **低等级风险**：
 - 影响范围小
@@ -7492,17 +7997,25 @@ Script compiled = cx.compileString(script, "test", 1, null);
 | 1.11 | 2026-03-23 | iFlow CLI | 新增优化编译器支持（5.8） |
 | 1.11 | 2026-03-23 | iFlow CLI | 新增 M0、M8 里程碑，调整工期为 29 天 |
 | 1.11 | 2026-03-23 | iFlow CLI | 新增代码库核对与文件调整清单（十三） |
+| 1.12 | 2026-03-23 | iFlow CLI | 更新策略：同时支持解释模式和优化模式（5.8.1） |
+| 1.12 | 2026-03-23 | iFlow CLI | 新增同时支持两种模式的代码结构图（5.8.8） |
+| 1.12 | 2026-03-23 | iFlow CLI | 新增并行开发流程图章节（5.9） |
+| 1.12 | 2026-03-23 | iFlow CLI | 新增自动降级机制章节（5.10） |
+| 1.12 | 2026-03-23 | iFlow CLI | 新增双模式验证方案章节（5.11） |
+| 1.12 | 2026-03-23 | iFlow CLI | 更新里程碑：M5+M8 并行开发，调整工期为 31 天（8.1） |
+| 1.12 | 2026-03-23 | iFlow CLI | 更新技术风险：添加优化模式、双模式验证、并行开发风险（9.1） |
 
 ## 十三、代码库核对与文件调整清单
 
 ### 13.1 执行摘要
 
-- **计划版本**: v1.11
+- **计划版本**: v1.12
 - **核对日期**: 2026-03-23
 - **假设验证通过率**: 85%
 - **主要风险**:
-  1. 优化编译器不支持类定义（高）
-  2. TDZ 机制未实现（高）
+  1. 优化模式字节码生成（高）
+  2. 双模式执行结果不一致（高）
+  3. TDZ 机制未实现（高）
   3. 私有字段线程安全（中）
 
 ### 13.2 计划假设核对结果
