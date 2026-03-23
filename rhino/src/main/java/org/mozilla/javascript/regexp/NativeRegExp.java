@@ -831,7 +831,7 @@ public class NativeRegExp extends ScriptableObject {
             }
         }
 
-        regexp.namedCaptureGroups = new HashMap<>();
+        regexp.namedCaptureGroups = new LinkedHashMap<>();
         if (state.namedCaptureGroupsFound) {
             extractNamedCaptureGroups(regexp.source, state.result, regexp.namedCaptureGroups);
             regexp.namedBackRefs = state.namedCaptureBackRefs;
