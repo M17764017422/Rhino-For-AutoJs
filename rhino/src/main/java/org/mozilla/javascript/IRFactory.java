@@ -22,6 +22,8 @@ import org.mozilla.javascript.ast.BigIntLiteral;
 import org.mozilla.javascript.ast.Block;
 import org.mozilla.javascript.ast.BreakStatement;
 import org.mozilla.javascript.ast.CatchClause;
+import org.mozilla.javascript.ast.ClassElement;
+import org.mozilla.javascript.ast.ClassNode;
 import org.mozilla.javascript.ast.ComputedPropertyKey;
 import org.mozilla.javascript.ast.ConditionalExpression;
 import org.mozilla.javascript.ast.ContinueStatement;
@@ -175,6 +177,8 @@ public final class IRFactory {
                 return transformForLoop((ForLoop) node);
             case Token.FUNCTION:
                 return transformFunction((FunctionNode) node);
+            case Token.CLASS:
+                return transformClass((ClassNode) node);
             case Token.GENEXPR:
                 return transformGenExpr((GeneratorExpression) node);
             case Token.GETELEM:
@@ -755,6 +759,183 @@ public final class IRFactory {
         } finally {
             astNodePos.pop();
         }
+    }
+
+    /**
+     * Transform a ClassNode AST into IR Node tree.
+     *
+     * <p>Class transformation creates:
+     * - A NEW_CLASS IR node that will create the class at runtime
+     * - Transformed methods and fields
+     * - Field initializers injected into constructor
+     * - Static block execution code
+     */
+    private Node transformClass(ClassNode classNode) {
+        astNodePos.push(classNode);
+        try {
+            Node classIRNode = new Node(Token.NEW_CLASS);
+
+            // Transform class name
+            Name className = classNode.getClassName();
+            if (className != null) {
+                classIRNode.addChildToBack(parser.createName(className.getIdentifier()));
+            } else {
+                classIRNode.addChildToBack(new Node(Token.NULL));
+            }
+
+            // Transform extends clause
+            AstNode superClass = classNode.getSuperClass();
+            if (superClass != null) {
+                classIRNode.addChildToBack(transform(superClass));
+            } else {
+                classIRNode.addChildToBack(new Node(Token.NULL));
+            }
+
+            // Transform class elements
+            Node protoMethods = new Node(Token.OBJECTLIT);
+            Node staticMethods = new Node(Token.OBJECTLIT);
+            Node instanceFields = new Node(Token.BLOCK);
+            Node staticFields = new Node(Token.BLOCK);
+            Node staticBlocks = new Node(Token.BLOCK);
+
+            FunctionNode constructor = null;
+
+            for (ClassElement element : classNode.getElements()) {
+                if (element.isConstructor()) {
+                    constructor = element.getMethod();
+                } else if (element.isMethod()) {
+                    Node methodNode = transformFunction(element.getMethod());
+                    String keyString = getKeyStringFromElement(element);
+
+                    if (element.isStatic()) {
+                        // Static method
+                        Node keyNode = createPropertyKeyNode(element);
+                        Node propNode = new Node(Token.COLON, keyNode, methodNode);
+                        staticMethods.addChildToBack(propNode);
+                    } else {
+                        // Instance method
+                        Node keyNode = createPropertyKeyNode(element);
+                        Node propNode = new Node(Token.COLON, keyNode, methodNode);
+                        protoMethods.addChildToBack(propNode);
+                    }
+                } else if (element.isField()) {
+                    AstNode fieldValue = element.getFieldValue();
+                    Node valueNode = fieldValue != null ? transform(fieldValue) : new Node(Token.UNDEFINED);
+
+                    if (element.isStatic()) {
+                        // Static field - will be executed after class creation
+                        Node keyNode = createPropertyKeyNode(element);
+                        Node fieldInit = new Node(Token.EXPR_VOID,
+                                createAssignment(Token.ASSIGN,
+                                        new Node(Token.GETPROP,
+                                                parser.createName(classNode.getName() != null ? classNode.getName() : ""),
+                                                keyNode),
+                                        valueNode));
+                        staticFields.addChildToBack(fieldInit);
+                    } else {
+                        // Instance field - will be injected into constructor
+                        Node keyNode = createPropertyKeyNode(element);
+                        Node fieldInit = new Node(Token.EXPR_VOID,
+                                createAssignment(Token.ASSIGN,
+                                        new Node(Token.GETPROP, new Node(Token.THIS), keyNode),
+                                        valueNode));
+                        instanceFields.addChildToBack(fieldInit);
+                    }
+                } else if (element.isStaticBlock()) {
+                    // Static block
+                    Block block = element.getStaticBlock();
+                    if (block != null) {
+                        Node blockNode = transform(block);
+                        staticBlocks.addChildToBack(blockNode);
+                    }
+                }
+            }
+
+            // Handle constructor
+            if (constructor != null) {
+                // Inject instance field initializers into constructor
+                Node ctorNode = transformFunction(constructor);
+                // Field injection will be handled at runtime
+                classIRNode.addChildToBack(ctorNode);
+            } else {
+                // Create default constructor
+                Node defaultCtor = createDefaultConstructor(classNode);
+                classIRNode.addChildToBack(defaultCtor);
+            }
+
+            classIRNode.addChildToBack(protoMethods);
+            classIRNode.addChildToBack(staticMethods);
+            classIRNode.addChildToBack(instanceFields);
+            classIRNode.addChildToBack(staticFields);
+            classIRNode.addChildToBack(staticBlocks);
+
+            // For class declaration, create a VAR statement to bind the class name
+            if (classNode.isClassStatement() && className != null) {
+                Node varNode = new Node(Token.VAR);
+                Node varChild = Node.newString(Token.NAME, className.getIdentifier());
+                varChild.addChildToBack(classIRNode);
+                varNode.addChildToBack(varChild);
+                return varNode;
+            }
+
+            return classIRNode;
+        } finally {
+            astNodePos.pop();
+        }
+    }
+
+    /**
+     * Create a default constructor for a class without explicit constructor.
+     */
+    private Node createDefaultConstructor(ClassNode classNode) {
+        // Create a simple function node that calls super() if derived
+        FunctionNode fn = new FunctionNode();
+        fn.setSourceName(parser.currentScriptOrFn.getNextTempName());
+        fn.setFunctionType(FunctionNode.FUNCTION_EXPRESSION);
+        fn.putIntProp(Node.CONSTRUCTOR_METHOD, 1);
+
+        Node body = new Node(Token.BLOCK);
+
+        if (classNode.isDerived()) {
+            // Derived class default constructor: constructor(...args) { super(...args); }
+            // Create super() call
+            Node superCall = new Node(Token.CALL, new Node(Token.SUPER));
+            Node exprNode = new Node(Token.EXPR_VOID, superCall);
+            body.addChildToFront(exprNode);
+        }
+        // Base class default constructor: constructor() { }
+
+        return initFunction(fn, parser.currentScriptOrFn.addFunction(fn), body, FunctionNode.FUNCTION_EXPRESSION);
+    }
+
+    /**
+     * Create a property key node from a class element.
+     */
+    private Node createPropertyKeyNode(ClassElement element) {
+        AstNode key = element.getKey();
+        if (key instanceof Name) {
+            return Node.newString(((Name) key).getIdentifier());
+        } else if (key instanceof StringLiteral) {
+            return Node.newString(((StringLiteral) key).getValue());
+        } else if (key instanceof NumberLiteral) {
+            return Node.newNumber(((NumberLiteral) key).getNumber());
+        } else if (key instanceof ComputedPropertyKey) {
+            return transform(((ComputedPropertyKey) key).getExpression());
+        }
+        return transform(key);
+    }
+
+    /**
+     * Get the string key from a class element.
+     */
+    private String getKeyStringFromElement(ClassElement element) {
+        AstNode key = element.getKey();
+        if (key instanceof Name) {
+            return ((Name) key).getIdentifier();
+        } else if (key instanceof StringLiteral) {
+            return ((StringLiteral) key).getValue();
+        }
+        return null;
     }
 
     private Node transformGenExpr(GeneratorExpression node) {
