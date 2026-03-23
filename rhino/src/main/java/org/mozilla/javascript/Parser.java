@@ -25,6 +25,8 @@ import org.mozilla.javascript.ast.BigIntLiteral;
 import org.mozilla.javascript.ast.Block;
 import org.mozilla.javascript.ast.BreakStatement;
 import org.mozilla.javascript.ast.CatchClause;
+import org.mozilla.javascript.ast.ClassElement;
+import org.mozilla.javascript.ast.ClassNode;
 import org.mozilla.javascript.ast.Comment;
 import org.mozilla.javascript.ast.ComputedPropertyKey;
 import org.mozilla.javascript.ast.ConditionalExpression;
@@ -1463,6 +1465,10 @@ public class Parser {
             case Token.FUNCTION:
                 consumeToken();
                 return function(FunctionNode.FUNCTION_EXPRESSION_STATEMENT);
+
+            case Token.CLASS:
+                consumeToken();
+                return classDeclaration();
 
             case Token.DEFAULT:
                 pn = defaultXmlNamespace();
@@ -3496,6 +3502,10 @@ public class Parser {
                 consumeToken();
                 return function(FunctionNode.FUNCTION_EXPRESSION);
 
+            case Token.CLASS:
+                consumeToken();
+                return classExpression();
+
             case Token.LB:
                 consumeToken();
                 return arrayLiteral();
@@ -5437,6 +5447,420 @@ public class Parser {
                 throw errorReporter.runtimeError(msg, sourceURI, baseLineno, null, 0);
         }
     }
+
+    // ==================== ES2022 Class Parsing Support ====================
+
+    /**
+     * Parse a class declaration: class Identifier [extends LeftHandSideExpression] { ClassBody }
+     */
+    private ClassNode classDeclaration() throws IOException {
+        int pos = ts.tokenBeg;
+        int lineno = lineNumber();
+        int column = columnNumber();
+
+        ClassNode classNode = new ClassNode(pos);
+        classNode.setClassType(ClassNode.CLASS_STATEMENT);
+        classNode.setLineColumnNumber(lineno, column);
+
+        // Parse class name (required for class declaration)
+        Name className = null;
+        if (matchToken(Token.NAME, true)) {
+            className = createNameNode(true, Token.NAME);
+            classNode.setClassName(className);
+            // Define the class name in the current scope
+            defineSymbol(Token.CLASS, className.getIdentifier());
+        } else {
+            reportError("msg.class.name.required");
+        }
+
+        // Parse optional extends clause
+        if (matchToken(Token.EXTENDS, true)) {
+            classNode.setExtendsPosition(ts.tokenBeg - pos);
+            AstNode superClass = memberExpr(false);
+            classNode.setSuperClass(superClass);
+        }
+
+        // Parse class body
+        if (!mustMatchToken(Token.LC, "msg.no.brace.class.body", true)) {
+            return classNode;
+        }
+        classNode.setLcPosition(ts.tokenBeg - pos);
+
+        parseClassBody(classNode);
+
+        if (!mustMatchToken(Token.RC, "msg.no.brace.after.class.body", true)) {
+            return classNode;
+        }
+        classNode.setRcPosition(ts.tokenBeg - pos);
+        classNode.setLength(ts.tokenEnd - pos);
+
+        return classNode;
+    }
+
+    /**
+     * Parse a class expression: class Identifier? [extends LeftHandSideExpression] { ClassBody }
+     */
+    private ClassNode classExpression() throws IOException {
+        int pos = ts.tokenBeg;
+        int lineno = lineNumber();
+        int column = columnNumber();
+
+        ClassNode classNode = new ClassNode(pos);
+        classNode.setClassType(ClassNode.CLASS_EXPRESSION);
+        classNode.setLineColumnNumber(lineno, column);
+
+        // Parse optional class name (class expressions can be anonymous)
+        if (matchToken(Token.NAME, true)) {
+            Name className = createNameNode(true, Token.NAME);
+            classNode.setClassName(className);
+        }
+
+        // Parse optional extends clause
+        if (matchToken(Token.EXTENDS, true)) {
+            classNode.setExtendsPosition(ts.tokenBeg - pos);
+            AstNode superClass = memberExpr(false);
+            classNode.setSuperClass(superClass);
+        }
+
+        // Parse class body
+        if (!mustMatchToken(Token.LC, "msg.no.brace.class.body", true)) {
+            return classNode;
+        }
+        classNode.setLcPosition(ts.tokenBeg - pos);
+
+        parseClassBody(classNode);
+
+        if (!mustMatchToken(Token.RC, "msg.no.brace.after.class.body", true)) {
+            return classNode;
+        }
+        classNode.setRcPosition(ts.tokenBeg - pos);
+        classNode.setLength(ts.tokenEnd - pos);
+
+        return classNode;
+    }
+
+    /**
+     * Parse class body: { ClassElementList }
+     * ClassBody may contain methods, fields, static blocks, and empty statements.
+     */
+    private void parseClassBody(ClassNode classNode) throws IOException {
+        boolean hasConstructor = false;
+        boolean hasStaticBlock = false;
+
+        while (true) {
+            int tt = peekToken();
+            if (tt == Token.RC || tt == Token.EOF || tt == Token.ERROR) {
+                break;
+            }
+
+            ClassElement element = parseClassElement(classNode);
+            if (element != null) {
+                // Check for duplicate constructor
+                if (element.isConstructor()) {
+                    if (hasConstructor) {
+                        reportError("msg.class.duplicate.constructor");
+                    }
+                    hasConstructor = true;
+                }
+
+                // Check for duplicate static block (only one allowed per class)
+                if (element.isStaticBlock()) {
+                    if (hasStaticBlock) {
+                        reportError("msg.class.duplicate.static.block");
+                    }
+                    hasStaticBlock = true;
+                }
+
+                classNode.addElement(element);
+            }
+        }
+    }
+
+    /**
+     * Parse a class element: method, field, or static block.
+     */
+    private ClassElement parseClassElement(ClassNode classNode) throws IOException {
+        int pos = ts.tokenBeg;
+        int lineno = lineNumber();
+        int column = columnNumber();
+
+        boolean isStatic = false;
+        boolean isAsync = false;
+        boolean isGenerator = false;
+        boolean isGetter = false;
+        boolean isSetter = false;
+
+        // Check for static keyword
+        if (matchToken(Token.NAME, true) && "static".equals(ts.getString())) {
+            isStatic = true;
+        }
+
+        // Check for static block: static { ... }
+        if (isStatic && matchToken(Token.LC, true)) {
+            return parseStaticBlock(pos, lineno, column);
+        }
+
+        // Check for async method
+        if (matchToken(Token.NAME, true) && "async".equals(ts.getString())) {
+            // Check if followed by '*' or a valid property name
+            int next = peekToken();
+            if (next == Token.MUL || next == Token.NAME || next == Token.STRING
+                    || next == Token.NUMBER || next == Token.LB) {
+                isAsync = true;
+            } else {
+                // 'async' is the property name
+                return parseClassField(pos, lineno, column, isStatic, false, createNameNode(true, Token.NAME));
+            }
+        }
+
+        // Check for generator method (*)
+        if (matchToken(Token.MUL, true)) {
+            isGenerator = true;
+        }
+
+        // Check for getter/setter
+        if (matchToken(Token.NAME, true)) {
+            String name = ts.getString();
+            if ("get".equals(name)) {
+                isGetter = true;
+            } else if ("set".equals(name)) {
+                isSetter = true;
+            } else {
+                // It's a property name
+                return parseClassFieldOrMethod(pos, lineno, column, isStatic, isAsync, isGenerator,
+                        createNameNode(true, Token.NAME));
+            }
+        }
+
+        // Parse property key
+        AstNode key = parseClassElementName();
+        if (key == null) {
+            // Empty statement (;)
+            if (matchToken(Token.SEMI, true)) {
+                return null; // Empty element, skip
+            }
+            reportError("msg.syntax");
+            return null;
+        }
+
+        // Determine element type
+        if (isGetter || isSetter) {
+            return parseClassAccessor(pos, lineno, column, isStatic, isGetter, key);
+        } else if (peekToken() == Token.LP) {
+            return parseClassMethod(pos, lineno, column, isStatic, isAsync, isGenerator, key);
+        } else {
+            return parseClassField(pos, lineno, column, isStatic, isGenerator, key);
+        }
+    }
+
+    /**
+     * Parse static initialization block: static { ... }
+     */
+    private ClassElement parseStaticBlock(int pos, int lineno, int column) throws IOException {
+        ClassElement element = new ClassElement(pos);
+        element.setElementType(ClassElement.STATIC_BLOCK);
+        element.setStatic(true);
+        element.setLineColumnNumber(lineno, column);
+
+        // Parse block body (already consumed '{')
+        Block block = new Block(ts.tokenBeg);
+        block.setLineColumnNumber(lineNumber(), columnNumber());
+
+        // Parse statements until '}'
+        while (true) {
+            int tt = peekToken();
+            if (tt == Token.RC || tt == Token.EOF || tt == Token.ERROR) {
+                break;
+            }
+            AstNode stmt = statement();
+            if (stmt != null) {
+                block.addStatement(stmt);
+            }
+        }
+
+        if (!mustMatchToken(Token.RC, "msg.no.brace.after.static.block", true)) {
+            return element;
+        }
+
+        block.setLength(ts.tokenEnd - block.getPosition());
+        element.setStaticBlock(block);
+        element.setLength(ts.tokenEnd - pos);
+
+        return element;
+    }
+
+    /**
+     * Parse class element name (property key).
+     * Can be: identifier, string, number, computed property [expr], or private field #name
+     */
+    private AstNode parseClassElementName() throws IOException {
+        int tt = peekToken();
+
+        switch (tt) {
+            case Token.NAME:
+                consumeToken();
+                return createNameNode(true, Token.NAME);
+
+            case Token.STRING:
+                consumeToken();
+                return createStringLiteral();
+
+            case Token.NUMBER:
+            case Token.BIGINT:
+                consumeToken();
+                return createNumericLiteral(tt, false);
+
+            case Token.LB:
+                // Computed property name
+                consumeToken();
+                int pos = ts.tokenBeg;
+                AstNode expr = assignExpr();
+                if (!mustMatchToken(Token.RB, "msg.no.bracket.computed.prop", true)) {
+                    return expr;
+                }
+                ComputedPropertyKey computed = new ComputedPropertyKey(pos, ts.tokenEnd - pos);
+                computed.setExpression(expr);
+                computed.setLineColumnNumber(lineNumber(), columnNumber());
+                return computed;
+
+            case Token.PRIVATE_FIELD:
+                // Private field #name
+                consumeToken();
+                int privatePos = ts.tokenBeg;
+                if (!mustMatchToken(Token.NAME, "msg.invalid.private.field", true)) {
+                    return null;
+                }
+                Name privateName = createNameNode(true, Token.PRIVATE_FIELD);
+                return privateName;
+
+            case Token.SEMI:
+                // Empty element
+                return null;
+
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Parse class method definition.
+     */
+    private ClassElement parseClassMethod(int pos, int lineno, int column,
+            boolean isStatic, boolean isAsync, boolean isGenerator, AstNode key) throws IOException {
+        ClassElement element = new ClassElement(pos);
+        element.setElementType(ClassElement.METHOD);
+        element.setStatic(isStatic);
+        element.setComputed(key instanceof ComputedPropertyKey);
+        element.setPrivate(key.getType() == Token.PRIVATE_FIELD);
+        element.setKey(key);
+        key.setParent(element);
+        element.setLineColumnNumber(lineno, column);
+
+        // Parse method (already at '(')
+        FunctionNode method = function(FunctionNode.FUNCTION_EXPRESSION, true);
+        if (isGenerator) {
+            method.setIsES6Generator();
+        }
+        // Mark as constructor if name is "constructor" and not static
+        if (!isStatic && "constructor".equals(getKeyString(key))) {
+            method.putIntProp(Node.CONSTRUCTOR_METHOD, 1);
+        }
+
+        element.setMethod(method);
+        element.setLength(ts.tokenEnd - pos);
+
+        return element;
+    }
+
+    /**
+     * Parse class getter or setter.
+     */
+    private ClassElement parseClassAccessor(int pos, int lineno, int column,
+            boolean isStatic, boolean isGetter, AstNode key) throws IOException {
+        ClassElement element = new ClassElement(pos);
+        element.setElementType(ClassElement.METHOD);
+        element.setStatic(isStatic);
+        element.setComputed(key instanceof ComputedPropertyKey);
+        element.setPrivate(key.getType() == Token.PRIVATE_FIELD);
+        element.setKey(key);
+        key.setParent(element);
+        element.setLineColumnNumber(lineno, column);
+
+        // Parse accessor method
+        FunctionNode method = function(FunctionNode.FUNCTION_EXPRESSION, true);
+        if (isGetter) {
+            method.setFunctionIsGetterMethod();
+        } else {
+            method.setFunctionIsSetterMethod();
+        }
+
+        element.setMethod(method);
+        element.setLength(ts.tokenEnd - pos);
+
+        return element;
+    }
+
+    /**
+     * Parse class field definition.
+     */
+    private ClassElement parseClassField(int pos, int lineno, int column,
+            boolean isStatic, boolean isGenerator, AstNode key) throws IOException {
+        ClassElement element = new ClassElement(pos);
+        element.setElementType(ClassElement.FIELD);
+        element.setStatic(isStatic);
+        element.setComputed(key instanceof ComputedPropertyKey);
+        element.setPrivate(key.getType() == Token.PRIVATE_FIELD);
+        element.setKey(key);
+        key.setParent(element);
+        element.setLineColumnNumber(lineno, column);
+
+        // Parse optional initializer
+        if (matchToken(Token.ASSIGN, true)) {
+            AstNode value = assignExpr();
+            element.setFieldValue(value);
+        }
+
+        // Consume semicolon
+        if (!matchToken(Token.SEMI, true)) {
+            // Auto-insert semicolon handling
+            int next = peekToken();
+            if (next != Token.RC && next != Token.EOF && (peekFlaggedToken() & TI_AFTER_EOL) == 0) {
+                reportError("msg.no.semi.stmt");
+            }
+        }
+
+        element.setLength(ts.tokenEnd - pos);
+
+        return element;
+    }
+
+    /**
+     * Parse class field or method (determine based on next token).
+     */
+    private ClassElement parseClassFieldOrMethod(int pos, int lineno, int column,
+            boolean isStatic, boolean isAsync, boolean isGenerator, AstNode key) throws IOException {
+        if (peekToken() == Token.LP) {
+            return parseClassMethod(pos, lineno, column, isStatic, isAsync, isGenerator, key);
+        } else {
+            return parseClassField(pos, lineno, column, isStatic, isGenerator, key);
+        }
+    }
+
+    /**
+     * Get the string value of a property key.
+     */
+    private String getKeyString(AstNode key) {
+        if (key instanceof Name) {
+            return ((Name) key).getIdentifier();
+        } else if (key instanceof StringLiteral) {
+            return ((StringLiteral) key).getValue();
+        } else if (key instanceof NumberLiteral) {
+            return String.valueOf(((NumberLiteral) key).getNumber());
+        }
+        return null;
+    }
+
+    // ==================== End ES2022 Class Parsing Support ====================
 
     public void setSourceURI(String sourceURI) {
         this.sourceURI = sourceURI;
