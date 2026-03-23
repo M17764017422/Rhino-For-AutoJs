@@ -21,6 +21,7 @@ public final class UniqueTag implements Serializable {
     private static final int ID_NOT_FOUND = 1;
     private static final int ID_NULL_VALUE = 2;
     private static final int ID_DOUBLE_MARK = 3;
+    private static final int ID_TDZ_VALUE = 4; // Temporal Dead Zone marker
 
     /** Tag to mark non-existing values. */
     public static final UniqueTag NOT_FOUND = new UniqueTag(ID_NOT_FOUND);
@@ -32,6 +33,13 @@ public final class UniqueTag implements Serializable {
      * Tag to indicate that a object represents "double" with the real value stored somewhere else.
      */
     public static final UniqueTag DOUBLE_MARK = new UniqueTag(ID_DOUBLE_MARK);
+
+    /**
+     * Tag to mark variables in the Temporal Dead Zone (TDZ).
+     * Used for let/const variables that have been hoisted but not yet initialized.
+     * Accessing a variable with this value should throw a ReferenceError.
+     */
+    public static final UniqueTag TDZ_VALUE = new UniqueTag(ID_TDZ_VALUE);
 
     private final int tagId;
 
@@ -47,6 +55,8 @@ public final class UniqueTag implements Serializable {
                 return NULL_VALUE;
             case ID_DOUBLE_MARK:
                 return DOUBLE_MARK;
+            case ID_TDZ_VALUE:
+                return TDZ_VALUE;
         }
         throw new IllegalStateException(String.valueOf(tagId));
     }
@@ -64,6 +74,9 @@ public final class UniqueTag implements Serializable {
                 break;
             case ID_DOUBLE_MARK:
                 name = "DOUBLE_MARK";
+                break;
+            case ID_TDZ_VALUE:
+                name = "TDZ_VALUE";
                 break;
             default:
                 throw Kit.codeBug();
