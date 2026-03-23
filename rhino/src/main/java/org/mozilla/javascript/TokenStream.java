@@ -364,7 +364,7 @@ class TokenStream implements Parser.CurrentPositionReporter {
                 Id_break = Token.BREAK,
                 Id_case = Token.CASE,
                 Id_catch = Token.CATCH,
-                Id_class = Token.RESERVED,
+                Id_class = Token.CLASS,
                 Id_const = Token.CONST,
                 Id_continue = Token.CONTINUE,
                 Id_debugger = Token.DEBUGGER,
@@ -373,7 +373,7 @@ class TokenStream implements Parser.CurrentPositionReporter {
                 Id_do = Token.DO,
                 Id_else = Token.ELSE,
                 Id_export = Token.RESERVED,
-                Id_extends = Token.RESERVED,
+                Id_extends = Token.EXTENDS,
                 Id_finally = Token.FINALLY,
                 Id_for = Token.FOR,
                 Id_function = Token.FUNCTION,
@@ -690,6 +690,60 @@ class TokenStream implements Parser.CurrentPositionReporter {
             tokenEnd = cursor;
 
             if (c == '@') return Token.XMLATTR;
+
+            // ES2022 private field identifier: #name
+            if (c == '#') {
+                c = getChar();
+                // Check if the next character is a valid identifier start
+                if (Character.isUnicodeIdentifierStart(c) || c == '$' || c == '_') {
+                    stringBufferTop = 0;
+                    addToString(c);
+                    // Read the rest of the identifier
+                    for (; ; ) {
+                        c = getChar();
+                        if (c == '\\') {
+                            // Handle unicode escape in private field name
+                            c = getChar();
+                            if (c == 'u') {
+                                int escapeVal = 0;
+                                if (matchTemplateLiteralChar('{')) {
+                                    for (; ; ) {
+                                        c = getTemplateLiteralChar();
+                                        if (c == '}') break;
+                                        escapeVal = Kit.xDigitToInt(c, escapeVal);
+                                        if (escapeVal < 0) break;
+                                    }
+                                } else {
+                                    for (int i = 0; i != 4; ++i) {
+                                        c = getChar();
+                                        escapeVal = Kit.xDigitToInt(c, escapeVal);
+                                        if (escapeVal < 0) break;
+                                    }
+                                }
+                                if (escapeVal < 0) {
+                                    parser.reportError("msg.invalid.escape");
+                                    return Token.ERROR;
+                                }
+                                addToString(escapeVal);
+                            } else {
+                                parser.reportError("msg.invalid.private.field");
+                                return Token.ERROR;
+                            }
+                        } else if (Character.isUnicodeIdentifierPart(c) || c == '$' || c == '_') {
+                            addToString(c);
+                        } else {
+                            break;
+                        }
+                    }
+                    ungetChar(c);
+                    this.string = getStringFromBuffer();
+                    return Token.PRIVATE_FIELD;
+                } else {
+                    // Invalid private field name - # must be followed by identifier
+                    parser.reportError("msg.invalid.private.field");
+                    return Token.ERROR;
+                }
+            }
 
             // identifier/keyword/instanceof?
             // watch out for starting with a <backslash>
