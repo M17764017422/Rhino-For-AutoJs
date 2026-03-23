@@ -1,8 +1,9 @@
 # Rhino ES2022 Class 支持开发计划
 
-> 版本: 1.0
-> 日期: 2026-03-22
-> 状态: 规划阶段
+> 版本: 1.11
+> 日期: 2026-03-23
+> 状态: 详细规划阶段
+> 变更说明: 基于探索报告 v1.0 完善，新增字节码指令规范、TDZ 实现、线程安全、优化编译器支持章节
 
 ## 一、项目概述
 
@@ -173,6 +174,7 @@ case Token.EXTENDS:
 | `CLASS_ELEMENT` | 166 | AST 节点 | 仅用于 AST 构造，不由 Scanner 返回 |
 | `PRIVATE_FIELD` | 167 | 词法单元 | 私有字段 `#` 前缀，需在 Scanner 中识别 |
 | `NEW_CLASS` | 168 | IR 节点 | 仅用于 IR 构造，不由 Scanner 返回 |
+| `STATIC_BLOCK` | 169 | AST 节点 | 静态初始化块，仅用于 AST 构造 |
 
 #### 5.1.6 兼容性检查
 
@@ -182,6 +184,113 @@ case Token.EXTENDS:
 | 与现有语法 Token 冲突 | ✅ 无冲突（从 164 开始） |
 | isValidToken() 方法 | ✅ 自动生效（范围检查用 LAST_TOKEN） |
 | printTrees 调试输出 | ✅ 需添加 typeToName 映射 |
+
+#### 5.1.7 字节码指令详细规范（v1.11 新增）
+
+##### 5.1.7.1 Icode 指令定义
+
+解释器需要新增专用的字节码指令来支持私有字段访问和类对象创建。
+
+```java
+// Icode.java - 在 MIN_ICODE 定义之前添加
+// ===== ES2022 Class 私有字段支持 =====
+Icode_GET_PRIVATE_FIELD = MIN_ICODE - 1,    // 获取私有字段值
+Icode_SET_PRIVATE_FIELD = Icode_GET_PRIVATE_FIELD - 1,  // 设置私有字段值
+Icode_NEW_CLASS = Icode_SET_PRIVATE_FIELD - 1,  // 创建类对象
+// 更新
+MIN_ICODE = Icode_NEW_CLASS;
+```
+
+**Icode 指令说明**：
+
+| Icode | 值 | 栈操作 | 说明 |
+|-------|-----|--------|------|
+| `Icode_GET_PRIVATE_FIELD` | -71 | `[instance, fieldName] → value` | 获取实例的私有字段值 |
+| `Icode_SET_PRIVATE_FIELD` | -72 | `[instance, fieldName, value] → value` | 设置实例的私有字段值 |
+| `Icode_NEW_CLASS` | -73 | `[superClass, methods] → classObject` | 创建类对象 |
+
+##### 5.1.7.2 Interpreter 指令注册
+
+```java
+// Interpreter.java - 在指令初始化代码中添加
+instructionObjs[base + Icode_GET_PRIVATE_FIELD] = new DoGetPrivateField();
+instructionObjs[base + Icode_SET_PRIVATE_FIELD] = new DoSetPrivateField();
+instructionObjs[base + Icode_NEW_CLASS] = new DoNewClass();
+```
+
+##### 5.1.7.3 指令实现类
+
+```java
+// Interpreter.java 内部类
+
+/**
+ * 获取私有字段值
+ * Stack: [instance, fieldName] → value
+ */
+private static class DoGetPrivateField extends InstructionClass {
+    @Override
+    public void execute(Context cx, CallFrame frame, int op) {
+        String fieldName = (String) frame.stack[state.stackTop--];
+        Object instance = frame.stack[state.stackTop--];
+        
+        // 通过 NativeClass 访问私有字段
+        Object value = ScriptRuntime.getPrivateField(
+            instance, fieldName, frame.fnOrScript, cx);
+        
+        frame.stack[++state.stackTop] = value;
+    }
+}
+
+/**
+ * 设置私有字段值
+ * Stack: [instance, fieldName, value] → value
+ */
+private static class DoSetPrivateField extends InstructionClass {
+    @Override
+    public void execute(Context cx, CallFrame frame, int op) {
+        Object value = frame.stack[state.stackTop--];
+        String fieldName = (String) frame.stack[state.stackTop--];
+        Object instance = frame.stack[state.stackTop--];
+        
+        // 通过 NativeClass 设置私有字段
+        ScriptRuntime.setPrivateField(
+            instance, fieldName, value, frame.fnOrScript, cx);
+        
+        frame.stack[++state.stackTop] = value;
+    }
+}
+
+/**
+ * 创建类对象
+ * Stack: [superClass, constructor, protoMethods, staticMethods] → classObject
+ */
+private static class DoNewClass extends InstructionClass {
+    @Override
+    public void execute(Context cx, CallFrame frame, int op) {
+        // 从栈上获取参数
+        Scriptable staticMethods = (Scriptable) frame.stack[state.stackTop--];
+        Scriptable protoMethods = (Scriptable) frame.stack[state.stackTop--];
+        Function constructor = (Function) frame.stack[state.stackTop--];
+        Scriptable superClass = (Scriptable) frame.stack[state.stackTop--];
+        
+        // 创建类对象
+        NativeClass classObj = ScriptRuntime.createClass(
+            cx, frame.scope, constructor, superClass, 
+            protoMethods, staticMethods);
+        
+        frame.stack[++state.stackTop] = classObj;
+    }
+}
+```
+
+##### 5.1.7.4 性能影响评估
+
+| 方案 | 性能 | 实现复杂度 | 推荐度 |
+|------|------|-----------|--------|
+| ScriptRuntime 静态调用 | 中 | 低 | ⭐⭐⭐ 初期推荐 |
+| 专用字节码指令 | 高 | 高 | ⭐⭐ 后期优化 |
+
+**建议**: 第一阶段使用 `ScriptRuntime.createClass()` 等静态方法调用，类似现有 `getSuperProp()` 模式。
 
 ### 5.2 Node 属性新增 (`Node.java`)
 
@@ -1697,6 +1806,131 @@ private ClassElement parseStaticBlock(int pos) throws IOException {
     element.setStaticBlock(block);
     element.setLength(ts.tokenEnd - pos);
     return element;
+}
+```
+
+#### 5.5.6 TDZ 检查实现（v1.11 新增）
+
+##### 5.5.6.1 类声明的 TDZ 行为
+
+类声明具有"提升但未初始化"特性，与 `let`/`const` 行为一致：
+
+```javascript
+// TDZ 示例
+{
+    console.log(MyClass);  // ReferenceError: Cannot access 'MyClass' before initialization
+    class MyClass {}
+}
+
+// 类名在类内部可用
+class A {
+    static create() { return new A(); }  // OK
+}
+```
+
+##### 5.5.6.2 实现位置
+
+| 文件 | 方法 | 说明 |
+|------|------|------|
+| `Parser.java` | `classDefinition()` | 标记 TDZ 开始位置 |
+| `ScriptRuntime.java` | `getVarWithTDZCheck()` | TDZ 检查方法 |
+| `Node.java` | `TDZ_CHECK_PROP` | TDZ 标记属性 |
+
+##### 5.5.6.3 TDZ 检查方法实现
+
+```java
+// ScriptRuntime.java 新增
+
+/**
+ * 检查变量是否在 TDZ (Temporal Dead Zone) 状态，并返回其值。
+ * 
+ * @param scope 当前作用域
+ * @param name 变量名
+ * @param cx 当前上下文
+ * @return 变量值
+ * @throws EcmaError 如果变量在 TDZ 状态
+ */
+public static Object getVarWithTDZCheck(Scriptable scope, String name, Context cx) {
+    // 使用 UniqueTag 标记 TDZ 状态
+    Object value = scope.get(name, scope);
+    
+    // 检查是否为 TDZ 标记值
+    if (value == UniqueTag.NOT_FOUND) {
+        // 变量未声明
+        throw ScriptRuntime.notFoundError(scope, name);
+    }
+    
+    // TDZ 标记值：使用特定的 UniqueTag 标记
+    if (value == UniqueTag.TDZ_VALUE) {
+        throw ScriptRuntime.constructError(
+            "ReferenceError", 
+            ScriptRuntime.getMessageById("msg.tdz.access", name));
+    }
+    
+    return value;
+}
+
+/**
+ * 标记变量进入 TDZ 状态（在声明前）。
+ * 在作用域中创建变量槽位但标记为不可访问。
+ */
+public static void markTDZSlot(Scriptable scope, String name) {
+    // 使用特殊的 UniqueTag 标记 TDZ 状态
+    scope.put(name, scope, UniqueTag.TDZ_VALUE);
+}
+
+/**
+ * 清除 TDZ 标记，变量变为可访问。
+ */
+public static void clearTDZSlot(Scriptable scope, String name, Object value) {
+    scope.put(name, scope, value);
+}
+```
+
+##### 5.5.6.4 Node 属性定义
+
+```java
+// Node.java 新增属性
+public static final int
+    // ... 现有属性 ...
+    TDZ_START_PROP = LAST_PROP + 1,     // TDZ 开始位置（行号）
+    LAST_PROP = TDZ_START_PROP + 1;
+```
+
+##### 5.5.6.5 UniqueTag 扩展
+
+```java
+// UniqueTag.java 新增
+public static final UniqueTag TDZ_VALUE = new UniqueTag("TDZ_VALUE");
+```
+
+##### 5.5.6.6 Parser 中标记 TDZ
+
+```java
+// Parser.java - classDefinition() 方法开头
+
+private ClassNode classDefinition(boolean isExpr) throws IOException {
+    int pos = ts.tokenBeg;
+    String className = null;
+    
+    // 解析类名（如果有）
+    if (ts.matchToken(Token.NAME)) {
+        className = ts.getString();
+        
+        // 标记 TDZ 开始 - 类名在声明前不可访问
+        if (!isExpr || className != null) {
+            currentScope.put(className, currentScope, UniqueTag.TDZ_VALUE);
+        }
+    }
+    
+    // ... 其余解析逻辑 ...
+    
+    // 类定义完成后，清除 TDZ 标记
+    if (className != null) {
+        currentScope.put(className, currentScope, classNode);
+    }
+    
+    return classNode;
 }
 ```
 
@@ -3663,7 +3897,1159 @@ public static void markThisInitialized(Scriptable thisObj) {
 }
 ```
 
-## 六、错误消息 (`messages.properties`)
+#### 5.7.6 new.target 支持
+
+**ES6 规范要求：**
+- `new.target` 在普通函数调用中返回 `undefined`
+- `new.target` 在构造器中返回实际被调用的类（即使是继承链中的父类构造器）
+
+**实现方案：**
+
+```java
+// ===== ScriptRuntime.java 新增 =====
+
+/**
+ * Get new.target value for current execution context.
+ * Returns the constructor that was actually invoked with 'new'.
+ */
+public static Object getNewTarget(Context cx) {
+    // Context 维护一个构造器调用栈
+    return cx.getCurrentNewTarget();
+}
+
+/**
+ * Set new.target for constructor invocation.
+ * Called when entering a constructor via 'new'.
+ */
+public static void setNewTarget(Context cx, Scriptable constructor) {
+    cx.pushNewTarget(constructor);
+}
+
+/**
+ * Clear new.target when exiting constructor.
+ */
+public static void clearNewTarget(Context cx) {
+    cx.popNewTarget();
+}
+
+// ===== Context.java 新增字段和方法 =====
+
+public class Context {
+    // ... 现有字段 ...
+    
+    // Stack of new.target values (for nested constructor calls)
+    private transient ArrayDeque<Scriptable> newTargetStack;
+    
+    /**
+     * Get the current new.target value.
+     */
+    public Object getCurrentNewTarget() {
+        if (newTargetStack == null || newTargetStack.isEmpty()) {
+            return Undefined.instance;
+        }
+        return newTargetStack.peek();
+    }
+    
+    /**
+     * Push a new new.target value when entering a constructor.
+     */
+    public void pushNewTarget(Scriptable constructor) {
+        if (newTargetStack == null) {
+            newTargetStack = new ArrayDeque<>();
+        }
+        newTargetStack.push(constructor);
+    }
+    
+    /**
+     * Pop new.target when exiting a constructor.
+     */
+    public void popNewTarget() {
+        if (newTargetStack != null && !newTargetStack.isEmpty()) {
+            newTargetStack.pop();
+        }
+    }
+}
+```
+
+**IRFactory 转换：**
+
+```java
+// IRFactory.java - 处理 new.target 引用
+
+/**
+ * Transform new.target expression.
+ * new.target is a meta-property that returns the constructor
+ * that was invoked with 'new'.
+ */
+private Node transformNewTarget(AstNode node) {
+    // 创建对 ScriptRuntime.getNewTarget() 的调用
+    Node call = new Node(Token.CALL);
+    
+    Node target = new Node(Token.GETPROP);
+    target.addChildToBack(parser.createName("ScriptRuntime"));
+    target.addChildToBack(Node.newString("getNewTarget"));
+    call.addChildToBack(target);
+    
+    // 无参数
+    return call;
+}
+```
+
+**NativeClass 构造器调用修改：**
+
+```java
+// NativeClass.java
+
+@Override
+public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+    // 类不能作为普通函数调用
+    throw ScriptRuntime.typeErrorById("msg.class.not.new", getFunctionName());
+}
+
+@Override
+public Scriptable construct(Context cx, Scriptable scope, Object[] args) {
+    // 设置 new.target
+    ScriptRuntime.setNewTarget(cx, this);
+    
+    try {
+        if (isDerived) {
+            // 派生类：创建 UninitializedObject，由 super() 初始化
+            UninitializedObject instance = new UninitializedObject();
+            instance.setPrototype(classPrototype);
+            instance.setParentScope(scope);
+            instance.setUninitialized(true);
+            
+            // 调用构造器
+            Object result = constructorMethod.call(cx, scope, instance, args);
+            
+            // 检查是否已初始化
+            if (instance.isUninitialized()) {
+                throw ScriptRuntime.referenceErrorById("msg.super.not.called");
+            }
+            
+            // 处理返回值
+            return processConstructorResult(result, instance);
+        } else {
+            // 基类：创建实例并调用构造器
+            Scriptable instance = cx.newObject(scope);
+            instance.setPrototype(classPrototype);
+            
+            Object result = constructorMethod.call(cx, scope, instance, args);
+            return processConstructorResult(result, instance);
+        }
+    } finally {
+        ScriptRuntime.clearNewTarget(cx);
+    }
+}
+```
+
+#### 5.7.7 super() 返回值处理
+
+**ES6 规范要求：**
+- `super()` 可以返回任意对象
+- 如果 `super()` 返回对象，则该对象成为 `this` 的最终值
+- 如果 `super()` 返回非对象（或无返回），则使用当前 `this`
+
+**实现方案：**
+
+```java
+// ===== ScriptRuntime.java =====
+
+/**
+ * Handle super() constructor call with proper this binding.
+ * 
+ * <p>Per ES6 spec:
+ * <ul>
+ *   <li>If super() returns an object, that object becomes 'this'</li>
+ *   <li>If super() returns non-object or undefined, the original 'this' is used</li>
+ * </ul>
+ * 
+ * @param cx the context
+ * @param thisObj the current this (UninitializedObject for derived class)
+ * @param superClass the super class constructor
+ * @param args arguments to pass to super constructor
+ * @return the object to use as 'this' (may be different from thisObj)
+ */
+public static Scriptable superConstructorCall(
+        Context cx, Scriptable scope, 
+        Scriptable thisObj, 
+        Scriptable superClass,
+        Object[] args) {
+    
+    // 检查 superClass 是否可构造
+    if (!(superClass instanceof Callable)) {
+        throw ScriptRuntime.typeErrorById("msg.not.ctor", 
+            ScriptRuntime.toString(superClass));
+    }
+    
+    // 调用父类构造器
+    Object result;
+    if (superClass instanceof BaseFunction) {
+        result = ((BaseFunction) superClass).constructAsSuper(cx, scope, args, thisObj);
+    } else {
+        // 内置构造器（如 Array）
+        result = ((Callable) superClass).call(cx, scope, thisObj, args);
+    }
+    
+    // 处理返回值
+    Scriptable finalThis;
+    if (result instanceof Scriptable) {
+        // super() 返回对象，使用该对象作为 this
+        finalThis = (Scriptable) result;
+    } else {
+        // super() 返回非对象或 undefined，使用原始 this
+        finalThis = thisObj;
+    }
+    
+    // 标记 this 已初始化
+    if (thisObj instanceof UninitializedObject) {
+        ((UninitializedObject) thisObj).setUninitialized(false);
+        // 绑定实际使用的 this
+        ((UninitializedObject) thisObj).setBoundThis(finalThis);
+    }
+    
+    return finalThis;
+}
+
+/**
+ * Check if super() was called (for derived class constructor validation).
+ */
+public static boolean wasSuperCalled(Scriptable thisObj) {
+    if (thisObj instanceof UninitializedObject) {
+        return !((UninitializedObject) thisObj).isUninitialized();
+    }
+    return true;  // 非 UninitializedObject 说明已初始化
+}
+```
+
+**UninitializedObject 增强：**
+
+```java
+/**
+ * Represents an uninitialized 'this' in derived class constructor.
+ * Created before super() is called, replaced after super() returns.
+ */
+public class UninitializedObject extends ScriptableObject {
+    private static final long serialVersionUID = 1L;
+    
+    private boolean uninitialized = true;
+    private Scriptable boundThis;  // super() 返回后的实际 this
+    
+    public UninitializedObject() {
+        super();
+    }
+    
+    public boolean isUninitialized() {
+        return uninitialized;
+    }
+    
+    public void setUninitialized(boolean uninitialized) {
+        this.uninitialized = uninitialized;
+    }
+    
+    public Scriptable getBoundThis() {
+        return boundThis;
+    }
+    
+    public void setBoundThis(Scriptable boundThis) {
+        this.boundThis = boundThis;
+    }
+    
+    @Override
+    public Object get(String name, Scriptable start) {
+        if (uninitialized) {
+            throw ScriptRuntime.referenceErrorById("msg.this.before.super");
+        }
+        return super.get(name, start);
+    }
+    
+    @Override
+    public void put(String name, Scriptable start, Object value) {
+        if (uninitialized) {
+            throw ScriptRuntime.referenceErrorById("msg.this.before.super");
+        }
+        super.put(name, start, value);
+    }
+    
+    @Override
+    public String getClassName() {
+        return "UninitializedObject";
+    }
+}
+```
+
+#### 5.7.8 构造器 return 语义
+
+**ES6 规范要求：**
+- 构造器可以 `return` 一个对象，该对象将替代 `this`
+- 构造器 `return` 非对象值（如 `return 42`）被忽略
+- 构造器无 `return` 或 `return undefined` 返回 `this`
+
+**实现方案：**
+
+```java
+// ===== NativeClass.java =====
+
+/**
+ * Process constructor return value per ES6 semantics.
+ * 
+ * @param result the value returned by the constructor
+ * @param defaultThis the 'this' object that was passed to constructor
+ * @return the final object (either result if object, or defaultThis)
+ */
+private Scriptable processConstructorResult(Object result, Scriptable defaultThis) {
+    if (result instanceof Scriptable) {
+        // 构造器返回对象，使用该对象
+        return (Scriptable) result;
+    } else {
+        // 构造器返回非对象或 undefined，使用 this
+        return defaultThis;
+    }
+}
+```
+
+**测试用例：**
+
+```javascript
+// Test 1: return 对象替代 this
+class A {
+    constructor() {
+        return { custom: true };
+    }
+}
+new A() instanceof A;  // false
+new A().custom;        // true
+
+// Test 2: return 非对象被忽略
+class B {
+    constructor() {
+        return 42;  // 被忽略
+    }
+}
+new B() instanceof B;  // true
+
+// Test 3: 派生类 return 对象
+class Parent {}
+class Child extends Parent {
+    constructor() {
+        super();
+        return { override: true };
+    }
+}
+new Child() instanceof Child;   // false
+new Child() instanceof Parent;  // false
+new Child().override;           // true
+```
+
+#### 5.7.9 私有字段 Brand Check 实现
+
+**ES2022 规范要求：**
+- 私有字段只能在声明它的类内部访问
+- 同类的不同实例可以互相访问私有字段
+- 不同类的实例即使有同名字段也不能互相访问
+
+**实现原理：**
+每个类有一个唯一的 "brand"（标识），访问私有字段时检查实例是否带有相同 brand。
+
+```java
+// ===== NativeClass.java =====
+
+/**
+ * Private field brand implementation.
+ * Each class has a unique brand object used to validate private field access.
+ */
+public class NativeClass extends BaseFunction {
+    
+    // 类的唯一标识，用于私有字段访问验证
+    private final Object classBrand = new Object();
+    
+    // 私有字段存储：brand -> (instance -> (fieldName -> value))
+    // 使用 brand 作为外层 key 确保不同类的私有字段完全隔离
+    private static final WeakHashMap<Object, WeakHashMap<Object, Map<String, Object>>> 
+        privateFieldStorage = new WeakHashMap<>();
+    
+    /**
+     * Get the class brand for private field validation.
+     */
+    public Object getClassBrand() {
+        return classBrand;
+    }
+    
+    /**
+     * Check if an object has this class's brand (is an instance of this class).
+     * Used for private field access validation.
+     */
+    public boolean hasBrand(Object obj) {
+        if (obj instanceof Scriptable) {
+            Object brand = ((Scriptable) obj).get("__brand__", (Scriptable) obj);
+            return classBrand.equals(brand);
+        }
+        return false;
+    }
+    
+    /**
+     * Apply this class's brand to an instance.
+     * Called when creating an instance via constructor.
+     */
+    public void applyBrand(Scriptable instance) {
+        instance.put("__brand__", instance, classBrand);
+        
+        // 同时在私有字段存储中注册
+        WeakHashMap<Object, Map<String, Object>> classStorage = 
+            privateFieldStorage.computeIfAbsent(classBrand, k -> new WeakHashMap<>());
+        classStorage.put(instance, new HashMap<>());
+    }
+}
+
+// ===== ScriptRuntime.java =====
+
+/**
+ * Get a private field value with brand check.
+ * 
+ * @param instance the object to read from
+ * @param fieldName the private field name (without #)
+ * @param classBrand the class brand for validation
+ * @return the field value
+ * @throws TypeError if instance doesn't have the brand
+ */
+public static Object getPrivateField(Object instance, String fieldName, Object classBrand) {
+    // 检查 brand
+    if (instance instanceof Scriptable) {
+        Object instanceBrand = ((Scriptable) instance).get("__brand__", (Scriptable) instance);
+        if (!classBrand.equals(instanceBrand)) {
+            throw ScriptRuntime.typeErrorById("msg.private.field.access", fieldName);
+        }
+    } else {
+        throw ScriptRuntime.typeErrorById("msg.private.field.access", fieldName);
+    }
+    
+    // 从存储中获取值
+    WeakHashMap<Object, Map<String, Object>> classStorage = privateFieldStorage.get(classBrand);
+    if (classStorage == null) {
+        return Undefined.instance;
+    }
+    
+    Map<String, Object> fields = classStorage.get(instance);
+    if (fields == null) {
+        return Undefined.instance;
+    }
+    
+    Object value = fields.get(fieldName);
+    return value != null ? value : Undefined.instance;
+}
+
+/**
+ * Set a private field value with brand check.
+ */
+public static void setPrivateField(Object instance, String fieldName, Object value, Object classBrand) {
+    // 检查 brand
+    if (instance instanceof Scriptable) {
+        Object instanceBrand = ((Scriptable) instance).get("__brand__", (Scriptable) instance);
+        if (!classBrand.equals(instanceBrand)) {
+            throw ScriptRuntime.typeErrorById("msg.private.field.access", fieldName);
+        }
+    } else {
+        throw ScriptRuntime.typeErrorById("msg.private.field.access", fieldName);
+    }
+    
+    // 设置值
+    WeakHashMap<Object, Map<String, Object>> classStorage = 
+        privateFieldStorage.computeIfAbsent(classBrand, k -> new WeakHashMap<>());
+    
+    Map<String, Object> fields = classStorage.computeIfAbsent(instance, k -> new HashMap<>());
+    fields.put(fieldName, value);
+}
+
+/**
+ * Check if a private field exists on an object (for 'in' operator support).
+ */
+public static boolean hasPrivateField(Object instance, String fieldName, Object classBrand) {
+    if (!classBrand.equals(((Scriptable) instance).get("__brand__", (Scriptable) instance))) {
+        return false;
+    }
+    
+    WeakHashMap<Object, Map<String, Object>> classStorage = privateFieldStorage.get(classBrand);
+    if (classStorage == null) return false;
+    
+    Map<String, Object> fields = classStorage.get(instance);
+    return fields != null && fields.containsKey(fieldName);
+}
+```
+
+**跨实例访问示例：**
+
+```javascript
+class A {
+    #x = 1;
+    
+    getX(other) {
+        // 同类实例可以访问私有字段
+        return other.#x;  // ✅ 允许（如果 other 是 A 的实例）
+    }
+}
+
+class B {
+    #x = 2;
+}
+
+var a1 = new A();
+var a2 = new A();
+var b = new B();
+
+a1.getX(a2);  // ✅ 返回 1（同类实例）
+a1.getX(b);   // ❌ TypeError: Cannot read private field #x of an object
+```
+
+#### 5.7.10 Symbol.species 处理
+
+**ES6 规范要求：**
+- 内置类（Array, Map, Set 等）使用 `Symbol.species` 创建派生对象
+- 派生类继承时，数组方法返回派生类实例而非 Array 实例
+
+**实现方案：**
+
+```java
+// ===== ScriptRuntime.java =====
+
+/**
+ * Get the species constructor for a constructor.
+ * Used by built-in methods that create derived instances.
+ * 
+ * @param constructor the original constructor
+ * @param defaultConstructor the default constructor to use if no species
+ * @return the constructor to use for creating derived instances
+ */
+public static Object getSpeciesConstructor(Scriptable constructor, Scriptable defaultConstructor) {
+    // 获取 constructor[Symbol.species]
+    Object species = null;
+    if (constructor instanceof Scriptable) {
+        Object symbolKey = getSymbolKey("species");
+        if (symbolKey != null) {
+            species = ((Scriptable) constructor).get(symbolKey, constructor);
+        }
+    }
+    
+    // species 为 undefined 或 null 时使用原构造器
+    if (species == null || species == Undefined.instance) {
+        return constructor;
+    }
+    
+    // species 必须是构造器
+    if (!(species instanceof Callable)) {
+        throw ScriptRuntime.typeErrorById("msg.not.ctor", ScriptRuntime.toString(species));
+    }
+    
+    return species;
+}
+
+/**
+ * Create a new instance using species constructor.
+ * Used by Array.prototype.map, filter, etc.
+ */
+public static Scriptable speciesCreate(
+        Context cx, Scriptable scope, 
+        Scriptable originalConstructor,
+        Object[] args) {
+    
+    Object speciesCtor = getSpeciesConstructor(originalConstructor, null);
+    
+    if (speciesCtor instanceof Scriptable) {
+        Scriptable ctor = (Scriptable) speciesCtor;
+        // 调用构造器
+        if (ctor instanceof BaseFunction) {
+            return ((BaseFunction) ctor).construct(cx, scope, args);
+        }
+    }
+    
+    // 默认使用 Array
+    return cx.newArray(scope, args.length);
+}
+```
+
+**NativeClass 中支持 Symbol.species：**
+
+```java
+// ===== NativeClass.java =====
+
+static {
+    // 注册 Symbol.species getter
+    try {
+        ScriptableObject.defineProperty(
+            NativeClass.prototype, 
+            "species", 
+            new SpeciesGetter(),
+            ScriptableObject.DONTENUM | ScriptableObject.READONLY
+        );
+    } catch (Exception e) {
+        // Ignore if already defined
+    }
+}
+
+/**
+ * Getter for Symbol.species - returns 'this' by default.
+ */
+private static class SpeciesGetter extends BaseFunction {
+    @Override
+    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+        // 默认返回 this（即构造器本身）
+        return thisObj;
+    }
+}
+```
+
+**测试用例：**
+
+```javascript
+// Test 1: 继承 Array，map 返回派生类实例
+class MyArray extends Array {
+    static get [Symbol.species]() { return Array; }
+}
+
+var ma = new MyArray(1, 2, 3);
+var mapped = ma.map(x => x * 2);
+
+mapped instanceof MyArray;  // false（因为 Symbol.species 返回 Array）
+mapped instanceof Array;    // true
+
+// Test 2: 不覆盖 Symbol.species
+class MyArray2 extends Array {}
+
+var ma2 = new MyArray2(1, 2, 3);
+var mapped2 = ma2.map(x => x * 2);
+
+mapped2 instanceof MyArray2;  // true（默认行为）
+mapped2 instanceof Array;     // true
+```
+
+#### 5.7.11 类字面量中的 this 绑定语义
+
+**ES6 规范要求：**
+- 类方法中的 `this` 动态绑定到调用者
+- 静态方法中的 `this` 指向类本身
+- 箭头函数在类中捕获定义时的 `this`
+- 字段初始化器中的 `this` 是正在构造的实例
+
+**实现方案：**
+
+```java
+// ===== IRFactory.java - 处理类方法中的 this =====
+
+/**
+ * Transform class method with proper this binding semantics.
+ */
+private Node transformClassMethod(ClassElement element, ClassNode classNode) {
+    FunctionNode method = element.getMethod();
+    
+    // 标记方法类型
+    if (element.isGetter()) {
+        method.setFunctionForm(FunctionNode.Form.GETTER);
+    } else if (element.isSetter()) {
+        method.setFunctionForm(FunctionNode.Form.SETTER);
+    } else {
+        method.setFunctionForm(FunctionNode.Form.METHOD);
+    }
+    
+    // 方法不是箭头函数，this 是动态绑定
+    // 无需特殊处理，运行时自动绑定
+    
+    Node methodIR = transformFunction(method);
+    
+    // 设置 home object 用于 super 访问
+    if (classNode.hasSuperClass() && !element.isStatic()) {
+        methodIR.putProp(Node.HOME_OBJECT_PROP, 1);
+    }
+    
+    return methodIR;
+}
+
+/**
+ * Transform arrow function in class context.
+ * Arrow functions capture this from enclosing scope.
+ */
+private Node transformArrowFunctionInClass(FunctionNode arrowFn, ClassNode classNode) {
+    // 箭头函数需要捕获 this
+    // 在构造器/方法中，this 指向实例
+    // 在静态方法/字段中，this 指向类
+    
+    // 标记为箭头函数
+    arrowFn.setFunctionForm(FunctionNode.Form.ARROW);
+    
+    // 转换时会自动捕获 this
+    return transformFunction(arrowFn);
+}
+```
+
+**字段初始化器中的 this：**
+
+```java
+/**
+ * Transform field initializer - this refers to the instance being constructed.
+ */
+private Node transformClassField(ClassElement element, boolean isDerived) {
+    Name key = element.getKey();
+    AstNode valueNode = element.getFieldValue();
+    
+    // 创建 this.fieldName = value
+    Node thisNode = new Node(Token.THIS);
+    Node lhs = new Node(Token.GETPROP, thisNode, Node.newString(key.getString()));
+    
+    // 转换初始化表达式
+    // 初始化器中的 this 指向正在构造的实例
+    Node rhs = valueNode != null ? transform(valueNode) : new Node(Token.UNDEFINED);
+    
+    Node assign = createAssignment(Token.ASSIGN, lhs, rhs);
+    return new Node(Token.EXPR_VOID, assign);
+}
+```
+
+**测试用例：**
+
+```javascript
+// Test 1: 方法中的 this 动态绑定
+class A {
+    getValue() { return this.x; }
+}
+
+var obj = { x: 42, method: A.prototype.getValue };
+obj.method();  // 42（this 是 obj）
+
+// Test 2: 箭头函数捕获 this
+class B {
+    constructor() {
+        this.x = 1;
+    }
+    getArrow() {
+        return () => this.x;  // 捕获实例 this
+    }
+}
+
+var b = new B();
+var arrow = b.getArrow();
+arrow();  // 1（即使独立调用）
+
+// Test 3: 静态方法中的 this
+class C {
+    static whoAmI() {
+        return this.name;  // this 是类本身
+    }
+}
+C.whoAmI();  // "C"
+
+// Test 4: 字段初始化器中的 this
+class D {
+    x = 1;
+    y = this.x + 1;  // this 是实例
+}
+new D().y;  // 2
+```
+
+#### 5.7.12 静态初始化块控制流限制
+
+**ES2022 规范要求：**
+- 静态块中不能使用 `return`、`break`、`continue` 跨出块
+- `super` 访问受限
+- `arguments` 和 `new.target` 不可用
+
+**Parser 层检查：**
+
+```java
+// ===== Parser.java =====
+
+/**
+ * Parse static initialization block.
+ * Static blocks have special restrictions on control flow.
+ */
+private AstNode parseStaticBlock(int lineno) throws IOException {
+    // 检查是否在类上下文中
+    if (!inClassContext) {
+        reportError("msg.static.block.outside.class");
+    }
+    
+    Block block = new Block(lineno);
+    pushScope(block);
+    
+    try {
+        // 标记在静态块中，用于控制流检查
+        inStaticBlock = true;
+        
+        mustMatchToken(Token.LC, "msg.no.brace.static.block");
+        
+        // 解析块内容
+        while (true) {
+            int tt = peekToken();
+            if (tt == Token.RC) {
+                break;
+            }
+            
+            AstNode stmt = parseStatement();
+            
+            // 检查非法控制流语句
+            validateStaticBlockStatement(stmt);
+            
+            block.addStatement(stmt);
+        }
+        
+        mustMatchToken(Token.RC, "msg.no.brace.after.static.block");
+        
+    } finally {
+        inStaticBlock = false;
+        popScope();
+    }
+    
+    return block;
+}
+
+/**
+ * Validate that a statement is valid in a static block.
+ * return, break, continue are not allowed.
+ */
+private void validateStaticBlockStatement(AstNode stmt) {
+    if (stmt instanceof ReturnStatement) {
+        reportError("msg.static.block.return", stmt.getLineno());
+    }
+    
+    if (stmt instanceof BreakStatement) {
+        // 只有在循环内部的 break 才允许
+        BreakStatement brk = (BreakStatement) stmt;
+        if (brk.getTarget() == null) {
+            // 没有 target 说明是 break; 形式，不允许
+            if (!isInLoop()) {
+                reportError("msg.static.block.break", stmt.getLineno());
+            }
+        }
+    }
+    
+    if (stmt instanceof ContinueStatement) {
+        // 只有在循环内部的 continue 才允许
+        if (!isInLoop()) {
+            reportError("msg.static.block.continue", stmt.getLineno());
+        }
+    }
+    
+    // 递归检查子节点
+    for (AstNode child : stmt) {
+        validateStaticBlockStatement(child);
+    }
+}
+
+/**
+ * Check if we're inside a loop (for break/continue validation).
+ */
+private boolean isInLoop() {
+    for (AstNode node : scopeStack) {
+        if (node instanceof ForLoop || 
+            node instanceof WhileLoop || 
+            node instanceof DoLoop ||
+            node instanceof ForInLoop) {
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+**IRFactory 层检查：**
+
+```java
+// ===== IRFactory.java =====
+
+/**
+ * Transform static block with IIFE pattern.
+ * Validates no illegal control flow.
+ */
+private Node transformStaticBlock(ClassElement element, String className) {
+    // 运行时再次检查（以防 AST 被修改）
+    validateStaticBlockIR(element.getStaticBlock());
+    
+    Block block = element.getStaticBlock();
+    
+    // 创建 IIFE: (function() { ... }).call(ClassName)
+    FunctionNode fn = new FunctionNode(block.getLineno());
+    fn.setFunctionName("");
+    fn.setFunctionType(FunctionNode.FUNCTION_EXPRESSION);
+    fn.setBody(block);
+    
+    Node fnIR = transformFunction(fn);
+    
+    // .call(ClassName)
+    Node call = new Node(Token.CALL);
+    Node callMethod = new Node(Token.GETPROP);
+    callMethod.addChildToBack(fnIR);
+    callMethod.addChildToBack(Node.newString("call"));
+    call.addChildToBack(callMethod);
+    call.addChildToBack(parser.createName(className));
+    
+    return new Node(Token.EXPR_VOID, call);
+}
+
+/**
+ * Runtime validation of static block control flow.
+ */
+private void validateStaticBlockIR(AstNode block) {
+    // 遍历 AST 检查非法语句
+    validateStaticBlockNode(block);
+}
+
+private void validateStaticBlockNode(AstNode node) {
+    if (node == null) return;
+    
+    // 检查 return（除非在嵌套函数中）
+    if (node instanceof ReturnStatement && !isInNestedFunction()) {
+        throw new IllegalArgumentException("Invalid return in static block");
+    }
+    
+    // 递归检查
+    for (AstNode child : node) {
+        validateStaticBlockNode(child);
+    }
+}
+```
+
+#### 5.7.13 类声明提升行为
+
+**ES6 规范要求：**
+- 类声明**不会**提升（与函数声明不同）
+- 类声明有 TDZ（Temporal Dead Zone）
+- 访问类声明之前的类会导致 ReferenceError
+
+**实现方案：**
+
+```java
+// ===== Parser.java =====
+
+/**
+ * Parse class declaration.
+ * Class declarations are NOT hoisted (unlike function declarations).
+ * 
+ * <p>This is handled by:
+ * <ol>
+ *   <li>Not adding class name to scope during parsing</li>
+ *   <li>Creating binding only when reaching the class declaration</li>
+ * </ol>
+ */
+private AstNode parseClassDeclaration() throws IOException {
+    int lineno = ts.lineno;
+    
+    mustMatchToken(Token.CLASS, "msg.no.class");
+    
+    // 获取类名（可选）
+    Name className = null;
+    if (peekToken() == Token.NAME) {
+        consumeToken();
+        className = createNameNode();
+    }
+    
+    // 创建 ClassNode
+    ClassNode classNode = new ClassNode(lineno);
+    classNode.setName(className != null ? className.getIdentifier() : "");
+    classNode.setIsClassStatement(true);
+    
+    // 解析 extends 和类体
+    if (matchToken(Token.EXTENDS)) {
+        AstNode superClass = parseExpression();
+        classNode.setSuperClass(superClass);
+    }
+    
+    parseClassBody(classNode);
+    
+    // 类声明不会提升，在当前位置创建绑定
+    // 变量声明已经在当前作用域中创建（如果有 let/const）
+    
+    return classNode;
+}
+
+/**
+ * Handle class declaration hoisting check.
+ * Unlike functions, classes are not hoisted.
+ */
+private void checkClassHoisting(String className, int lineno) {
+    // 检查是否在类声明之前有引用
+    // 这需要在运行时检测
+    
+    // 在作用域中记录类声明的位置
+    currentScope.putDeclarationPosition(className, lineno);
+}
+```
+
+**运行时 TDZ 检查：**
+
+```java
+// ===== ScriptRuntime.java =====
+
+/**
+ * Get a variable with TDZ check for class declarations.
+ * 
+ * @param name the variable name
+ * @param scope the current scope
+ * @param currentLine current line number
+ * @return the variable value
+ * @throws ReferenceError if accessing before declaration (TDZ)
+ */
+public static Object getVarWithTDZCheck(String name, Scriptable scope, int currentLine) {
+    // 检查 TDZ
+    if (scope instanceof NativeBlock) {
+        Integer declLine = ((NativeBlock) scope).getDeclarationLine(name);
+        if (declLine != null && currentLine < declLine) {
+            // 在声明行之前访问
+            throw ScriptRuntime.referenceErrorById("msg.let.before.init", name);
+        }
+    }
+    
+    return getObjectProp(scope, name, scope);
+}
+```
+
+**测试用例：**
+
+```javascript
+// Test 1: 类声明不提升
+try {
+    new A();  // ReferenceError
+    class A {}
+} catch(e) {
+    console.log("Class not hoisted");
+}
+
+// Test 2: 函数声明提升（对比）
+foo();  // ✅ 可以调用
+function foo() { console.log("hoisted"); }
+
+// Test 3: 类在块级作用域中的 TDZ
+{
+    try {
+        B;  // ReferenceError (TDZ)
+    } catch(e) {}
+    class B {}
+    B;  // ✅ OK
+}
+```
+
+#### 5.7.14 类表达式名称绑定作用域
+
+**ES6 规范要求：**
+- 类表达式的名称只在类内部可见
+- 类表达式名称不会泄漏到外部作用域
+- 类表达式的 `name` 属性是类名
+
+**实现方案：**
+
+```java
+// ===== Parser.java =====
+
+/**
+ * Parse class expression with scoped name binding.
+ * The class name is only visible inside the class.
+ */
+private AstNode parseClassExpression() throws IOException {
+    int lineno = ts.lineno;
+    
+    mustMatchToken(Token.CLASS, "msg.no.class");
+    
+    // 获取可选的类名
+    Name className = null;
+    String classNameStr = null;
+    
+    if (peekToken() == Token.NAME) {
+        consumeToken();
+        className = createNameNode();
+        classNameStr = className.getIdentifier();
+    }
+    
+    // 创建 ClassNode
+    ClassNode classNode = new ClassNode(lineno);
+    classNode.setName(classNameStr != null ? classNameStr : "");
+    classNode.setIsClassStatement(false);  // 表达式，不是声明
+    
+    // 类名只在类内部可见
+    // 创建一个新的作用域用于类名绑定
+    if (classNameStr != null) {
+        pushClassScope(classNode, classNameStr);
+    }
+    
+    try {
+        // 解析 extends 和类体
+        if (matchToken(Token.EXTENDS)) {
+            AstNode superClass = parseExpression();
+            classNode.setSuperClass(superClass);
+        }
+        
+        parseClassBody(classNode);
+        
+    } finally {
+        if (classNameStr != null) {
+            popClassScope();
+        }
+    }
+    
+    return classNode;
+}
+
+/**
+ * Push a scope for class expression name binding.
+ */
+private void pushClassScope(ClassNode classNode, String className) {
+    // 创建一个特殊的作用域，类名只在这个作用域内可见
+    // 这个作用域不会影响外部变量查找
+    classNode.setClassNameScope(className);
+}
+```
+
+**IRFactory 处理：**
+
+```java
+// ===== IRFactory.java =====
+
+/**
+ * Transform class expression.
+ * The class name (if any) is only visible inside the class.
+ */
+private Node transformClassExpression(ClassNode classNode) {
+    String className = classNode.getName();
+    
+    // 类表达式名称不在外部作用域可见
+    // 但在类内部（静态方法、静态字段）可以引用
+    
+    // 转换为 IR
+    Node classIR = transformClass(classNode);
+    
+    // 如果有类名，确保 name 属性被设置
+    if (className != null && !className.isEmpty()) {
+        // name 属性已在 NativeClass 中设置
+    }
+    
+    return classIR;
+}
+```
+
+**测试用例：**
+
+```javascript
+// Test 1: 类表达式名称不泄漏
+var A = class B {};
+typeof B;  // "undefined"（B 不在外部可见）
+A.name;    // "B"（name 属性是 B）
+
+// Test 2: 类表达式名称在内部可见
+var C = class D {
+    static whoAmI() {
+        return D.name;  // ✅ D 在内部可见
+    }
+};
+C.whoAmI();  // "D"
+
+// Test 3: 匿名类表达式
+var E = class {};
+E.name;  // "E"（从变量名推断，或 "E"）
+
+// Test 4: 类表达式名称与外部变量
+var F = class G {
+    static getOuter() {
+        return typeof G;  // "function"（内部可见）
+    }
+};
+typeof G;  // "undefined"（外部不可见）
+F.getOuter();  // "function"
+```
 
 ```properties
 # ========================================
@@ -3723,6 +5109,353 @@ msg.static.block.return=Invalid return in static block
 msg.static.block.break=Invalid break in static block
 msg.static.block.continue=Invalid continue in static block
 ```
+
+#### 5.7.10 线程安全与序列化（v1.11 新增）
+
+##### 5.7.10.1 问题分析
+
+根据代码探索发现，计划中的私有字段存储方案存在以下风险：
+
+| 问题 | 风险等级 | 说明 |
+|------|----------|------|
+| WeakHashMap 线程安全 | **中** | 多线程访问可能数据不一致 |
+| classBrand 序列化 | **高** | 每次反序列化生成新对象，brand 检查失效 |
+| transient 字段丢失 | **高** | 反序列化后私有字段数据丢失 |
+
+##### 5.7.10.2 并发访问解决方案
+
+**问题**：`WeakHashMap` 非线程安全，多线程环境可能导致数据不一致。
+
+**解决方案**：使用 `ConcurrentHashMap` 或同步包装器。
+
+```java
+// NativeClass.java 修改
+
+// 方案 1: 使用 ConcurrentHashMap（推荐）
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
+public class NativeClass extends BaseFunction {
+    // 私有字段存储：instance -> (fieldName -> value)
+    private transient ConcurrentMap<Object, Map<String, Object>> privateFieldStorage =
+        new ConcurrentHashMap<>();
+    
+    // 线程安全的私有字段访问
+    public Object getPrivateField(Object instance, String fieldName) {
+        Map<String, Object> fields = privateFieldStorage.get(instance);
+        if (fields == null) {
+            return undefinedValue;
+        }
+        synchronized (fields) {
+            return fields.getOrDefault(fieldName, undefinedValue);
+        }
+    }
+    
+    public void setPrivateField(Object instance, String fieldName, Object value) {
+        privateFieldStorage.computeIfAbsent(instance, k -> new ConcurrentHashMap<>())
+            .put(fieldName, value);
+    }
+}
+```
+
+##### 5.7.10.3 序列化支持
+
+**问题**：`classBrand = new Object()` 每次反序列化会创建新对象，导致 brand 检查失败。
+
+**解决方案**：使用 UUID 字符串作为 brand。
+
+```java
+// NativeClass.java 修改
+
+import java.util.UUID;
+
+public class NativeClass extends BaseFunction {
+    private static final long serialVersionUID = 1L;
+    
+    // 使用 UUID 替代 Object 引用
+    private final String classBrand = UUID.randomUUID().toString();
+    
+    // transient 字段需要在反序列化时重建
+    private transient ConcurrentMap<Object, Map<String, Object>> privateFieldStorage =
+        new ConcurrentHashMap<>();
+    
+    // 序列化支持
+    private void readObject(java.io.ObjectInputStream stream)
+            throws java.io.IOException, ClassNotFoundException {
+        stream.defaultReadObject();
+        // 重建私有字段存储
+        privateFieldStorage = new ConcurrentHashMap<>();
+    }
+    
+    // Brand 检查方法
+    public boolean checkBrand(Object instance, String brand) {
+        return this.classBrand.equals(brand);
+    }
+    
+    public String getBrand() {
+        return classBrand;
+    }
+}
+```
+
+##### 5.7.10.4 完整实现代码
+
+```java
+package org.mozilla.javascript;
+
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
+/**
+ * Runtime representation of a JavaScript class (ES2022).
+ * Extends BaseFunction to support constructor call semantics.
+ */
+public class NativeClass extends BaseFunction {
+    private static final long serialVersionUID = 1L;
+    
+    // Unique identifier for private field brand checking
+    private final String classBrand = UUID.randomUUID().toString();
+    
+    // Thread-safe storage for private fields: instance -> (fieldName -> value)
+    private transient ConcurrentMap<Object, Map<String, Object>> privateFieldStorage =
+        new ConcurrentHashMap<>();
+    
+    // Class metadata
+    private final String className;
+    private final Scriptable superClass;
+    private final Scriptable prototype;
+    
+    // Constructor
+    public NativeClass(String className, Scriptable superClass, Scriptable prototype) {
+        this.className = className;
+        this.superClass = superClass;
+        this.prototype = prototype;
+    }
+    
+    // ===== Private Field Access =====
+    
+    public Object getPrivateField(Object instance, String fieldName) {
+        Map<String, Object> fields = privateFieldStorage.get(instance);
+        if (fields == null) {
+            throw ScriptRuntime.typeErrorById("msg.private.field.not.found", fieldName);
+        }
+        Object value = fields.get(fieldName);
+        return value != null ? value : Undefined.instance;
+    }
+    
+    public void setPrivateField(Object instance, String fieldName, Object value) {
+        privateFieldStorage
+            .computeIfAbsent(instance, k -> new ConcurrentHashMap<>())
+            .put(fieldName, value);
+    }
+    
+    public boolean hasPrivateField(Object instance, String fieldName) {
+        Map<String, Object> fields = privateFieldStorage.get(instance);
+        return fields != null && fields.containsKey(fieldName);
+    }
+    
+    // ===== Brand Checking =====
+    
+    /**
+     * Check if the instance belongs to this class (for private field access).
+     */
+    public boolean checkBrand(Object instance) {
+        // Check if instance was created by this class
+        return privateFieldStorage.containsKey(instance);
+    }
+    
+    public String getBrand() {
+        return classBrand;
+    }
+    
+    // ===== Serialization Support =====
+    
+    private void readObject(ObjectInputStream stream) 
+            throws IOException, ClassNotFoundException {
+        stream.defaultReadObject();
+        // Rebuild transient field
+        privateFieldStorage = new ConcurrentHashMap<>();
+    }
+    
+    // ===== BaseFunction Overrides =====
+    
+    @Override
+    public String getFunctionName() {
+        return className;
+    }
+    
+    @Override
+    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+        // Classes cannot be called without new
+        throw ScriptRuntime.typeErrorById("msg.class.requires.new", className);
+    }
+    
+    @Override
+    public Scriptable construct(Context cx, Scriptable scope, Object[] args) {
+        // Create new instance
+        Scriptable instance = createInstance(cx, scope);
+        // Call constructor
+        callConstructor(cx, scope, instance, args);
+        return instance;
+    }
+}
+```
+
+### 5.8 优化编译器支持（v1.11 新增）
+
+#### 5.8.1 分阶段实现策略
+
+根据代码探索发现，`optimizer/Codegen.java` 当前完全不支持类定义。
+
+| 阶段 | 优化级别 | 支持状态 | 实现内容 |
+|------|----------|----------|----------|
+| **第一阶段** | -1, -2 (解释模式) | ✅ 可用 | 仅实现 Token、Parser、Interpreter 支持 |
+| **第二阶段** | 0-9 (优化模式) | ❌ 待实现 | Codegen、BodyCodegen JVM 字节码生成 |
+
+**推荐策略**：先完成第一阶段，确保基础功能可用后再处理优化器。
+
+#### 5.8.2 第一阶段实现（解释模式）
+
+第一阶段不需要修改优化器，类定义在解释模式下运行：
+
+```java
+// 使用方式
+Context cx = Context.enter();
+cx.setOptimizationLevel(-1);  // 解释模式
+// cx.setOptimizationLevel(9);  // 优化模式 - 第二阶段支持
+```
+
+#### 5.8.3 第二阶段需要修改的文件
+
+| 文件 | 位置 | 修改内容 | 预估代码量 |
+|------|------|----------|-----------|
+| `optimizer/Codegen.java` | `transform()` | 类节点 JVM 字节码生成入口 | ~50 行 |
+| `optimizer/BodyCodegen.java` | `visitStatement()` | 添加 `case Token.CLASS` | ~80 行 |
+| `optimizer/Optimizer.java` | 全局 | 类节点优化规则 | ~30 行 |
+| `optimizer/OptFunctionNode.java` | 新增字段 | 类节点信息存储 | ~20 行 |
+
+#### 5.8.4 Codegen.java 修改示例
+
+```java
+// optimizer/Codegen.java
+
+@Override
+public byte[] compileToClassFile(
+        CompilerEnvirons compilerEnv,
+        JSDescriptor.Builder<?> builder,
+        OptJSCode.BuilderEnv builderEnv,
+        String mainClassName,
+        ScriptNode scriptOrFn,
+        String rawSource,
+        boolean returnFunction) {
+    this.compilerEnv = compilerEnv;
+
+    // 检查是否包含类定义（优化模式暂不支持）
+    if (!compilerEnv.isInterpretedMode() && containsClassDefinition(scriptOrFn)) {
+        // 方案 A: 自动降级到解释模式
+        // 方案 B: 抛出异常提示用户
+        throw new RuntimeException(
+            "Class definitions are not yet supported in optimized mode. " +
+            "Use Context.setOptimizationLevel(-1) for interpreted mode.");
+    }
+
+    transform(scriptOrFn);
+    // ... 其余代码 ...
+}
+
+/**
+ * 检查脚本是否包含类定义
+ */
+private boolean containsClassDefinition(ScriptNode node) {
+    // 递归检查 AST 是否包含 Token.CLASS
+    return containsClassDefinition_r(node);
+}
+
+private boolean containsClassDefinition_r(Node node) {
+    if (node.getType() == Token.CLASS) {
+        return true;
+    }
+    for (Node child = node.getFirstChild(); child != null; child = child.getNext()) {
+        if (containsClassDefinition_r(child)) {
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+#### 5.8.5 BodyCodegen.java 修改示例
+
+```java
+// optimizer/BodyCodegen.java
+
+private void visitStatement(Node node) {
+    int type = node.getType();
+    
+    switch (type) {
+        // ... 现有 case ...
+        
+        case Token.CLASS:
+            // 第二阶段：生成类定义的 JVM 字节码
+            visitClassDefinition(node);
+            break;
+            
+        // ... 其他 case ...
+    }
+}
+
+/**
+ * 生成类定义的 JVM 字节码（第二阶段实现）
+ */
+private void visitClassDefinition(Node classNode) {
+    // TODO: 第二阶段实现
+    // 1. 生成构造器函数字节码
+    // 2. 生成原型方法字节码
+    // 3. 生成静态方法字节码
+    // 4. 生成字段初始化代码
+    // 5. 生成静态块执行代码
+    throw new UnsupportedOperationException(
+        "Class definitions in optimized mode will be supported in phase 2");
+}
+```
+
+#### 5.8.6 自动降级策略
+
+为了更好的用户体验，可以实现自动降级：
+
+```java
+// Codegen.java - 改进的 transform() 方法
+
+private void transform(ScriptNode tree) {
+    initOptFunctions_r(tree);
+
+    // 检测类定义，自动降级到解释模式
+    if (!compilerEnv.isInterpretedMode() && containsClassDefinition(tree)) {
+        // 记录警告日志
+        if (compilerEnv.isGenerateDebugInfo()) {
+            System.err.println(
+                "Warning: Class definition detected, " +
+                "falling back to interpreted mode");
+        }
+        // 强制使用解释模式
+        compilerEnv.setInterpretedMode(true);
+    }
+
+    // ... 原有的 transform 逻辑 ...
+}
+```
+
+#### 5.8.7 实现优先级
+
+| 优先级 | 任务 | 依赖 |
+|--------|------|------|
+| P0 | 第一阶段：解释模式支持 | 无 |
+| P1 | 自动降级机制 | P0 |
+| P2 | 第二阶段：优化模式支持 | P0, 测试通过 |
 
 ## 七、测试用例
 
@@ -5190,16 +6923,38 @@ public class ClassTest {
 
 | 里程碑 | 内容 | 预估时间 | 依赖 |
 |--------|------|----------|------|
-| **M1** | Token + AST 节点 (ClassNode, ClassElement) | 3 天 | 无 |
+| **M0** | 基础设施（Token 定义 + TDZ 框架原型验证） | 2 天 | 无 |
+| **M1** | Token + AST 节点 (ClassNode, ClassElement) | 3 天 | M0 |
 | **M2** | TokenStream 词法分析器修改（# 私有字段支持） | 1 天 | M1 |
 | **M3** | Parser 解析逻辑 (classDefinition, parseClassBody, parseClassElement) | 5 天 | M2 |
 | **M4** | IRFactory 转换逻辑 (transformClass, 字段注入) | 4 天 | M3 |
 | **M5** | 运行时支持 (NativeClass, ScriptRuntime.createClass) | 4 天 | M4 |
 | **M6** | 单元测试 + test262 class 相关用例验证 | 4 天 | M5 |
 | **M7** | Bug 修复 + 边界情况处理 | 3 天 | M6 |
-| **总计** | | **24 天** | |
+| **M8** | 优化编译器支持（第二阶段） | 3 天 | M5 |
+| **总计** | | **29 天** | |
+
+#### 8.1.1 里程碑说明（v1.11 更新）
+
+**M0（新增）**：在正式开发前完成 Token 定义验证和 TDZ 框架原型。
+- 确认 Token 值分配不冲突
+- 实现 `UniqueTag.TDZ_VALUE` 原型
+- 验证 let/const TDZ 行为
+
+**M8（新增）**：优化编译器支持作为独立里程碑。
+- 第一阶段（M1-M7）：仅支持解释模式
+- 第二阶段（M8）：添加优化模式支持
+- 降低开发风险，允许分阶段交付
 
 ### 8.2 Git 提交任务列表
+
+#### M0: 基础设施（2 天）
+
+| 提交 | 修改文件 | 主要内容 | 耗时 |
+|------|----------|----------|------|
+| `feat(class): verify Token allocation` | `Token.java` | 确认 LAST_TOKEN 值；验证新 Token 分配无冲突 | 0.5 天 |
+| `feat(class): add TDZ UniqueTag` | `UniqueTag.java` | 添加 TDZ_VALUE 标记；验证 let/const TDZ 行为 | 0.5 天 |
+| `feat(class): implement getVarWithTDZCheck prototype` | `ScriptRuntime.java` | TDZ 检查方法原型；单元测试 | 1 天 |
 
 #### M1: Token + AST 节点（3 天）
 
@@ -5209,6 +6964,7 @@ public class ClassTest {
 | `feat(class): add ClassNode AST node` | `ClassNode.java`, `AstNode.java` | 实现 ClassNode 类（继承 AstNode）；AstNode.visit() 添加 ClassNode 分支 | 1 天 |
 | `feat(class): add ClassElement AST node` | `ClassElement.java` | 实现 ClassElement 类（方法、字段、getter/setter、静态块） | 1 天 |
 | `docs(class): add error messages for class syntax` | `Messages.properties` | 添加 40+ 条 class 相关错误消息 | 0.5 天 |
+
 
 #### M2: TokenStream 词法分析器（1 天）
 
@@ -5269,12 +7025,30 @@ public class ClassTest {
 | super() 调用的正确性 | **高** | 派生类构造器语义复杂，super() 必须在 this 访问前调用 | 实现 UninitializedObject 追踪状态；参考 V8/SpiderMonkey 实现 |
 | 派生类构造器语义 | **高** | 默认构造器需自动调用 super(...args)；this 初始化顺序严格 | Parser 生成默认构造器时插入 super() 调用 |
 | super 属性访问 this 绑定 | **高** | super.method() 中 this 必须正确绑定到子类实例 | 使用现有 SUPER_PROPERTY_ACCESS 机制；设置 home object |
-| 私有字段访问控制 | **中** | 只能在类内部访问；跨实例访问需要权限检查 | WeakHashMap 存储；在 AST/IRFactory 双层检查访问权限 |
+| **优化编译器不支持** | **高** | 优化模式（级别 0-9）下类定义会失败 | 第一阶段仅支持解释模式；第二阶段实现优化器支持 |
+| **TDZ 未实现** | **高** | 类声明提升行为不符合 ES 规范 | 新增 getVarWithTDZCheck() 方法；Parser 标记 TDZ 位置 |
+| 私有字段访问控制 | **中** | 只能在类内部访问；跨实例访问需要权限检查 | ConcurrentHashMap 存储；在 AST/IRFactory 双层检查访问权限 |
+| **私有字段线程安全** | **中** | WeakHashMap 非线程安全，多线程环境数据不一致 | 使用 ConcurrentHashMap 替代 WeakHashMap |
+| **序列化 brand 丢失** | **中** | 反序列化后 classBrand 变为新对象，私有字段访问失败 | 使用 UUID 字符串作为 classBrand |
 | 优化器兼容性 | **中** | 字段注入到构造器可能影响优化器假设 | 字段注入在 IR 转换阶段完成，优化器处理后端；使用现有 body.addChildToFront() 模式 |
 | 原型链设置 | **中** | ES6 类继承有两层原型链：实例原型链和构造器原型链 | NativeClass.setPrototype() 设置构造器原型链；prototype.setPrototype() 设置实例原型链 |
 | 静态块执行时机 | **低** | 静态块必须在类定义时立即执行 | IRFactory 在类定义处生成静态块执行代码 |
 | 与现有 super 支持冲突 | **低** | Rhino 已有 super 属性访问支持，需确保不冲突 | 复用现有 Token.SUPER、SUPER_PROPERTY_ACCESS 机制 |
 | test262 测试用例量大 | **低** | class 相关测试有 8000+ 个用例 | 分阶段启用；优先通过核心语义测试 |
+
+### 9.1.1 风险等级说明（v1.11 更新）
+
+**高等级风险**：
+- 必须在开发前充分评估，否则可能导致重大返工
+- 需要专项测试用例覆盖
+
+**中等级风险**：
+- 影响特定场景或边界情况
+- 有现成解决方案可参考
+
+**低等级风险**：
+- 影响范围小
+- 现有代码已提供解决方案
 
 ### 9.2 已发现的技术细节
 
@@ -5696,3 +7470,145 @@ Script compiled = cx.compileString(script, "test", 1, null);
 | 1.8 | 2026-03-23 | iFlow CLI | 细化开发里程碑为 26 个 Git 提交任务 |
 | 1.8 | 2026-03-23 | iFlow CLI | 扩展风险分析（9 项风险，含等级评估） |
 | 1.8 | 2026-03-23 | iFlow CLI | 添加已发现技术细节（super 支持、函数体操作、私有字段存储） |
+| 1.9 | 2026-03-23 | iFlow CLI | 添加 IRFactory.transformClass() 完整实现代码（5.6.7） |
+| 1.9 | 2026-03-23 | iFlow CLI | 添加 super() 构造器调用检测与转换逻辑（5.6.8） |
+| 1.9 | 2026-03-23 | iFlow CLI | 添加私有字段访问编译时检查代码（5.6.9） |
+| 1.9 | 2026-03-23 | iFlow CLI | 添加静态块处理实现（5.6.10） |
+| 1.9 | 2026-03-23 | iFlow CLI | 添加完整 ES2022 class 测试脚本（7.4，60+ 测试用例） |
+| 1.9 | 2026-03-23 | iFlow CLI | 添加 Java 单元测试 ClassTest.java（7.5） |
+| 1.9 | 2026-03-23 | iFlow CLI | 添加优化器兼容性验证清单（9.4，15 项检查） |
+| 1.10 | 2026-03-23 | iFlow CLI | 添加 new.target 支持实现（5.7.6，含 Context 修改） |
+| 1.10 | 2026-03-23 | iFlow CLI | 添加 super() 返回值处理（5.7.7，UninitializedObject 增强） |
+| 1.10 | 2026-03-23 | iFlow CLI | 添加构造器 return 语义（5.7.8） |
+| 1.10 | 2026-03-23 | iFlow CLI | 添加私有字段 brand check 实现（5.7.9，跨实例访问） |
+| 1.10 | 2026-03-23 | iFlow CLI | 添加 Symbol.species 处理（5.7.10，继承内置类） |
+| 1.10 | 2026-03-23 | iFlow CLI | 添加类字面量 this 绑定语义（5.7.11） |
+| 1.10 | 2026-03-23 | iFlow CLI | 添加静态块控制流限制（5.7.12，return/break/continue 检查） |
+| 1.10 | 2026-03-23 | iFlow CLI | 添加类声明提升行为（5.7.13，TDZ 检查） |
+| 1.10 | 2026-03-23 | iFlow CLI | 添加类表达式名称绑定作用域（5.7.14） |
+| 1.11 | 2026-03-23 | iFlow CLI | 新增字节码指令详细规范（5.1.7） |
+| 1.11 | 2026-03-23 | iFlow CLI | 新增 TDZ 检查实现（5.5.6） |
+| 1.11 | 2026-03-23 | iFlow CLI | 新增线程安全与序列化（5.7.10） |
+| 1.11 | 2026-03-23 | iFlow CLI | 新增优化编译器支持（5.8） |
+| 1.11 | 2026-03-23 | iFlow CLI | 新增 M0、M8 里程碑，调整工期为 29 天 |
+| 1.11 | 2026-03-23 | iFlow CLI | 新增代码库核对与文件调整清单（十三） |
+
+## 十三、代码库核对与文件调整清单
+
+### 13.1 执行摘要
+
+- **计划版本**: v1.11
+- **核对日期**: 2026-03-23
+- **假设验证通过率**: 85%
+- **主要风险**:
+  1. 优化编译器不支持类定义（高）
+  2. TDZ 机制未实现（高）
+  3. 私有字段线程安全（中）
+
+### 13.2 计划假设核对结果
+
+| 模块 | 检查项 | 计划假设 | 实际发现 | 状态 | 备注 |
+|------|--------|----------|----------|------|------|
+| Token | LAST_TOKEN 值 | ≈164 | OBJECT_REST + 1 | ✅ | 确认新 Token 从 LAST_TOKEN 开始追加 |
+| Token | OBJECT_REST | 存在 | L248 定义 | ✅ | QUESTION_DOT + 1 |
+| Super | SUPER_PROPERTY_ACCESS | =31 | Node.java L70 | ✅ | 属性存在，可复用 |
+| Super | getSuperProp 方法 | 存在 | ScriptRuntime.java L1970 | ✅ | 完整实现，可复用 |
+| Super | setHomeObject | 存在 | BaseFunction.java L800 | ✅ | homeObject 机制完整 |
+| TDZ | UniqueTag 结构 | 需新增 TDZ_VALUE | 仅有 NOT_FOUND/NULL_VALUE/DOUBLE_MARK | ⚠️ | 需新增 ID_TDZ_VALUE = 4 |
+| Optimizer | Codegen 类支持 | 无 | 确认无 Token.CLASS 处理 | ✅ | 需新增 |
+| Thread | NativeWeakMap 实现 | 参考 | 使用 WeakHashMap，非线程安全 | ⚠️ | 需改用 ConcurrentHashMap |
+| Runtime | BaseFunction.construct | 可继承 | L542，支持重写 | ✅ | createObject() 可自定义 |
+
+### 13.3 核对评估计划
+
+#### 13.3.1 阶段划分
+
+| 阶段 | 对应里程碑 | 重点验证文件 | 验证命令/方法 |
+|------|------------|--------------|---------------|
+| 基础设施 | M0 | Token.java, UniqueTag.java, Node.java | `grep "LAST_TOKEN"` `grep "class UniqueTag"` |
+| 解析层 | M1-M3 | Parser.java, TokenStream.java, ClassNode.java | `grep "statement()"` `grep "primaryExpr()"` |
+| 转换层 | M4 | IRFactory.java, CodeGenerator.java | `grep "transformFunction"` `grep "visitStatement"` |
+| 运行时 | M5 | NativeClass.java, ScriptRuntime.java, BaseFunction.java | 检查继承链、construct 方法 |
+| 测试 | M6 | ClassTest.java, test262.properties | 运行单元测试 |
+| 优化器 | M8 | optimizer/Codegen.java, optimizer/BodyCodegen.java | 检查 switch case |
+
+#### 13.3.2 高风险文件预警
+
+| 文件 | 风险等级 | 原因 | 缓解措施 |
+|------|----------|------|----------|
+| Parser.java | 高 | 核心解析逻辑，影响所有语法 | 增加回归测试覆盖，保持向后兼容 |
+| IRFactory.java | 高 | IR 转换逻辑，影响执行语义 | 分步实现，每步验证 |
+| ScriptRuntime.java | 中 | 运行时核心，影响性能 | 保持方法签名稳定 |
+| optimizer/Codegen.java | 中 | 优化器代码生成 | 第一阶段降级到解释模式 |
+
+### 13.4 具体文件调整清单 (File Adjustment Checklist)
+
+#### 13.4.1 新增文件
+
+| 优先级 | 文件路径 | 用途 | 预估代码量 | 依赖模块 |
+|--------|----------|------|------------|----------|
+| P0 | `rhino/.../ast/ClassNode.java` | Class AST 节点 | 250 LOC | Token.java |
+| P0 | `rhino/.../ast/ClassElement.java` | Class 元素节点 | 180 LOC | ClassNode |
+| P0 | `rhino/.../NativeClass.java` | 运行时类对象 | 300 LOC | BaseFunction |
+| P1 | `rhino/.../UninitializedObject.java` | 派生类 this 占位 | 80 LOC | NativeClass |
+| P2 | `tests/.../es2022/ClassTest.java` | 单元测试 | 200 LOC | JUnit |
+| P2 | `tests/testsrc/jstests/es2022/class.js` | JS 测试脚本 | 300 LOC | 无 |
+
+#### 13.4.2 修改文件 (精确到方法)
+
+| 优先级 | 文件路径 | 方法/位置 | 修改内容 | 预估代码量 | 风险等级 |
+|--------|----------|-----------|----------|------------|----------|
+| P0 | `Token.java` | 常量定义区 (L249) | 新增 CLASS, EXTENDS, CLASS_ELEMENT, PRIVATE_FIELD, NEW_CLASS, STATIC_BLOCK | 20 LOC | 低 |
+| P0 | `Token.java` | `typeToName()` (L260+) | 添加新 Token 名称映射 | 12 LOC | 低 |
+| P0 | `UniqueTag.java` | 常量定义 (L22+) | 新增 ID_TDZ_VALUE = 4, TDZ_VALUE 实例 | 8 LOC | 低 |
+| P0 | `Node.java` | 常量定义 (L70+) | 新增 CLASS_NAME_PROP, PRIVATE_FIELDS_PROP 等 | 15 LOC | 低 |
+| P0 | `TokenStream.java` | `getToken()` | 添加 `#` 私有字段识别逻辑 | 30 LOC | 中 |
+| P0 | `TokenStream.java` | `stringToKeywordForES()` | 修改 class/extends 返回对应 Token | 5 LOC | 低 |
+| P0 | `Parser.java` | `statement()` (L~200) | 添加 Token.CLASS 分支 | 10 LOC | 中 |
+| P0 | `Parser.java` | 新增方法 | 实现 `parseClassDefinition()` | 150 LOC | 高 |
+| P0 | `Parser.java` | 新增方法 | 实现 `parseClassBody()` | 100 LOC | 高 |
+| P0 | `Parser.java` | 新增方法 | 实现 `parseClassElement()` | 80 LOC | 高 |
+| P0 | `Parser.java` | 新增方法 | 实现 `parseFieldDefinition()` | 50 LOC | 中 |
+| P1 | `AstNode.java` | `visit()` 方法 | 添加 ClassNode 分支 | 5 LOC | 低 |
+| P1 | `IRFactory.java` | `transform()` (L~200) | 添加 Token.CLASS 处理分支 | 20 LOC | 高 |
+| P1 | `IRFactory.java` | 新增方法 | 实现 `transformClass()` | 200 LOC | 高 |
+| P1 | `IRFactory.java` | 新增方法 | 实现 `injectFieldInitializers()` | 50 LOC | 中 |
+| P1 | `IRFactory.java` | 新增方法 | 实现 `transformSuperConstructorCall()` | 40 LOC | 中 |
+| P1 | `ScriptRuntime.java` | 新增方法 | 实现 `createClass()` | 100 LOC | 高 |
+| P1 | `ScriptRuntime.java` | 新增方法 | 实现 `getPrivateField()` | 30 LOC | 中 |
+| P1 | `ScriptRuntime.java` | 新增方法 | 实现 `setPrivateField()` | 30 LOC | 中 |
+| P1 | `ScriptRuntime.java` | 新增方法 | 实现 `getVarWithTDZCheck()` | 25 LOC | 中 |
+| P1 | `ScriptRuntime.java` | 新增方法 | 实现 `superConstructorCall()` | 50 LOC | 高 |
+| P2 | `CodeGenerator.java` | switch 语句 (L~500) | 添加新 Token 的 case 分支 | 50 LOC | 中 |
+| P2 | `Interpreter.java` | 指令注册 (L~1400) | 新增 DoClass, DoPrivateField 指令 | 100 LOC | 中 |
+| P2 | `optimizer/Codegen.java` | `transform()` (L~150) | 添加类节点降级或支持逻辑 | 50 LOC | 高 |
+| P3 | `Messages.properties` | 文件末尾 | 新增 40+ 条错误消息 | 45 LOC | 低 |
+| P3 | `test262.properties` | 排除列表 | 移除 class 测试排除标记 | 2 LOC | 低 |
+
+### 13.5 Git 提交策略建议
+
+#### 13.5.1 提交分组
+
+| 提交组 | 包含文件 | 说明 |
+|--------|----------|------|
+| group-01 | Token.java, Node.java, UniqueTag.java | 基础常量定义，无逻辑依赖 |
+| group-02 | ClassNode.java, ClassElement.java | AST 节点定义，独立编译 |
+| group-03 | TokenStream.java, Parser.java | 解析逻辑，影响语法树生成 |
+| group-04 | IRFactory.java, CodeGenerator.java, Interpreter.java | 转换与字节码，影响执行 |
+| group-05 | NativeClass.java, ScriptRuntime.java, UninitializedObject.java | 运行时逻辑，核心功能 |
+| group-06 | Tests, Messages.properties, test262.properties | 测试与资源配置 |
+
+#### 13.5.2 回滚计划
+
+- 若 **group-03** 导致解析失败，立即回滚并检查 Token 定义和 Parser 入口分支。
+- 若 **group-04** 导致 IR 转换错误，检查 transformClass() 的返回值和 Node 结构。
+- 若 **group-05** 导致运行时错误，检查 `super()` 调用链、原型链设置和私有字段 brand check。
+
+### 13.6 结论与下一步
+
+- **计划可行性**: 可行，但需注意 TDZ 和线程安全问题
+- **主要阻碍**: 
+  1. TDZ 需要新增 UniqueTag.TDZ_VALUE
+  2. 私有字段存储需使用 ConcurrentHashMap
+  3. 优化编译器第一阶段不支持
+- **建议行动**: 立即启动 M0 里程碑（Token 定义 + TDZ 框架原型验证）
