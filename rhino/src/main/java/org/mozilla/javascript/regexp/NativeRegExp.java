@@ -710,7 +710,7 @@ public class NativeRegExp extends ScriptableObject {
             } else if (node.op == REOP_ALT) {
                 // handle duplicate capture group names between kid1 and kid2
                 // by storing all the parenIndex values in a list
-                Map<String, List<Integer>> groupCaptures1 = new HashMap<>();
+                Map<String, List<Integer>> groupCaptures1 = new LinkedHashMap<>();
                 Map<String, List<Integer>> groupCaptures2;
                 extractNamedCaptureGroups(src, node.kid, groupCaptures1);
 
@@ -719,7 +719,7 @@ public class NativeRegExp extends ScriptableObject {
                     // kid2
                     extractNamedCaptureGroups(src, node.kid2, namedCaptureGroups);
                 } else {
-                    groupCaptures2 = new HashMap<>();
+                    groupCaptures2 = new LinkedHashMap<>();
                     extractNamedCaptureGroups(src, node.kid2, groupCaptures2);
 
                     for (Map.Entry<String, List<Integer>> entry : groupCaptures2.entrySet()) {
