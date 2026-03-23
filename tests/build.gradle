@@ -150,6 +150,9 @@ tasks.register('test262', Test) {
     // Include only Test262 suite
     include '**/Test262SuiteTest.class'
 
+    // Test262 needs longer timeout (60 minutes) due to 112k+ tests
+    timeout = java.time.Duration.ofMinutes(60)
+
     System.properties.each { k, v ->
         if (k.startsWith("rhino.")) {
             systemProperty k, v
