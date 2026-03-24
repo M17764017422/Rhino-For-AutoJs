@@ -1478,6 +1478,10 @@ public final class Interpreter extends Icode implements Evaluator {
         instructionObjs[base + Icode_TAIL_CALL] = new DoCallByteCode();
         instructionObjs[base + Token.REF_CALL] = new DoCallByteCode();
         instructionObjs[base + Token.NEW] = new DoNew();
+        instructionObjs[base + Token.NEW_CLASS] = new DoNewClass();
+        instructionObjs[base + Token.GET_PRIVATE_FIELD] = new DoGetPrivateField();
+        instructionObjs[base + Token.SET_PRIVATE_FIELD] = new DoSetPrivateField();
+        instructionObjs[base + Token.SET_PRIVATE_FIELD_OP] = new DoSetPrivateFieldOp();
         instructionObjs[base + Token.TYPEOF] = new DoTypeOf();
         instructionObjs[base + Icode_TYPEOFNAME] = new DoTypeOfName();
         instructionObjs[base + Token.STRING] = new DoString();
@@ -3719,6 +3723,180 @@ public final class Interpreter extends Icode implements Evaluator {
         @Override
         void dumpICode(int op, String tname, ICodeDumpContext ctx) {
             ctx.out.println(tname + " " + ctx.indexReg);
+        }
+    }
+
+    private static class DoNewClass extends InstructionClass {
+        @Override
+        NewState execute(Context cx, CallFrame frame, InterpreterState state, int op) {
+            if (state.instructionCounting) {
+                cx.instructionCount += INVOCATION_COST;
+            }
+            // Stack layout (top to bottom):
+            // stackTop:     staticInitFn
+            // stackTop - 1: instanceFieldInitFn
+            // stackTop - 2: staticMethods
+            // stackTop - 3: protoMethods
+            // stackTop - 4: constructor
+            // stackTop - 5: superClass
+            // stackTop - 6: className
+            // After: class object
+
+            Object[] stack = frame.stack;
+            double[] sDbl = frame.sDbl;
+            int st = state.stackTop;
+
+            // Get all 7 arguments from stack
+            Object staticInitFn = stack[st];
+            if (staticInitFn == DOUBLE_MARK) staticInitFn = ScriptRuntime.wrapNumber(sDbl[st]);
+
+            Object instanceFieldInitFn = stack[st - 1];
+            if (instanceFieldInitFn == DOUBLE_MARK)
+                instanceFieldInitFn = ScriptRuntime.wrapNumber(sDbl[st - 1]);
+
+            Object staticMethods = stack[st - 2];
+            if (staticMethods == DOUBLE_MARK)
+                staticMethods = ScriptRuntime.wrapNumber(sDbl[st - 2]);
+
+            Object protoMethods = stack[st - 3];
+            if (protoMethods == DOUBLE_MARK) protoMethods = ScriptRuntime.wrapNumber(sDbl[st - 3]);
+
+            Object constructor = stack[st - 4];
+            if (constructor == DOUBLE_MARK) constructor = ScriptRuntime.wrapNumber(sDbl[st - 4]);
+
+            Object superClass = stack[st - 5];
+            if (superClass == DOUBLE_MARK) superClass = ScriptRuntime.wrapNumber(sDbl[st - 5]);
+            if (superClass == null) superClass = Undefined.instance;
+
+            Object classNameObj = stack[st - 6];
+            if (classNameObj == DOUBLE_MARK) classNameObj = ScriptRuntime.wrapNumber(sDbl[st - 6]);
+            String className = (classNameObj == null) ? "" : ScriptRuntime.toString(classNameObj);
+
+            // Call ScriptRuntime.createClass
+            Scriptable classObj =
+                    ScriptRuntime.createClass(
+                            cx,
+                            frame.scope,
+                            className,
+                            (superClass == Undefined.instance) ? null : (Scriptable) superClass,
+                            (Function) constructor,
+                            (Scriptable) protoMethods,
+                            (Scriptable) staticMethods,
+                            (Function) instanceFieldInitFn,
+                            (Function) staticInitFn);
+
+            // Update stack: 7 args -> 1 result
+            state.stackTop -= 6;
+            stack[state.stackTop] = classObj;
+
+            return null;
+        }
+    }
+
+    private static class DoGetPrivateField extends InstructionClass {
+        @Override
+        NewState execute(Context cx, CallFrame frame, InterpreterState state, int op) {
+            if (state.instructionCounting) {
+                cx.instructionCount += INVOCATION_COST;
+            }
+            // Stack layout: [instance, fieldName] -> result
+            Object[] stack = frame.stack;
+            double[] sDbl = frame.sDbl;
+            int st = state.stackTop;
+
+            // Get field name (string)
+            Object fieldNameObj = stack[st];
+            if (fieldNameObj == DOUBLE_MARK) fieldNameObj = ScriptRuntime.wrapNumber(sDbl[st]);
+            String fieldName = ScriptRuntime.toString(fieldNameObj);
+
+            // Get instance
+            Object instance = stack[st - 1];
+            if (instance == DOUBLE_MARK) instance = ScriptRuntime.wrapNumber(sDbl[st - 1]);
+
+            // Call ScriptRuntime.getPrivateFieldInternal
+            Object result =
+                    ScriptRuntime.getPrivateFieldInternal(instance, fieldName, cx, frame.scope);
+
+            // Update stack: 2 args -> 1 result
+            state.stackTop--;
+            stack[state.stackTop] = result;
+
+            return null;
+        }
+    }
+
+    private static class DoSetPrivateField extends InstructionClass {
+        @Override
+        NewState execute(Context cx, CallFrame frame, InterpreterState state, int op) {
+            if (state.instructionCounting) {
+                cx.instructionCount += INVOCATION_COST;
+            }
+            // Stack layout: [instance, fieldName, value] -> result
+            Object[] stack = frame.stack;
+            double[] sDbl = frame.sDbl;
+            int st = state.stackTop;
+
+            // Get value
+            Object value = stack[st];
+            if (value == DOUBLE_MARK) value = ScriptRuntime.wrapNumber(sDbl[st]);
+
+            // Get field name (string)
+            Object fieldNameObj = stack[st - 1];
+            if (fieldNameObj == DOUBLE_MARK) fieldNameObj = ScriptRuntime.wrapNumber(sDbl[st - 1]);
+            String fieldName = ScriptRuntime.toString(fieldNameObj);
+
+            // Get instance
+            Object instance = stack[st - 2];
+            if (instance == DOUBLE_MARK) instance = ScriptRuntime.wrapNumber(sDbl[st - 2]);
+
+            // Call ScriptRuntime.setPrivateFieldInternal
+            Object result =
+                    ScriptRuntime.setPrivateFieldInternal(
+                            instance, fieldName, value, cx, frame.scope);
+
+            // Update stack: 3 args -> 1 result
+            state.stackTop -= 2;
+            stack[state.stackTop] = result;
+
+            return null;
+        }
+    }
+
+    private static class DoSetPrivateFieldOp extends InstructionClass {
+        @Override
+        NewState execute(Context cx, CallFrame frame, InterpreterState state, int op) {
+            if (state.instructionCounting) {
+                cx.instructionCount += INVOCATION_COST;
+            }
+            // Stack layout: [instance, fieldName, opResult] -> result
+            // opResult is the result of the compound operation
+            Object[] stack = frame.stack;
+            double[] sDbl = frame.sDbl;
+            int st = state.stackTop;
+
+            // Get op result (the computed value to assign)
+            Object opResult = stack[st];
+            if (opResult == DOUBLE_MARK) opResult = ScriptRuntime.wrapNumber(sDbl[st]);
+
+            // Get field name (string)
+            Object fieldNameObj = stack[st - 1];
+            if (fieldNameObj == DOUBLE_MARK) fieldNameObj = ScriptRuntime.wrapNumber(sDbl[st - 1]);
+            String fieldName = ScriptRuntime.toString(fieldNameObj);
+
+            // Get instance
+            Object instance = stack[st - 2];
+            if (instance == DOUBLE_MARK) instance = ScriptRuntime.wrapNumber(sDbl[st - 2]);
+
+            // Call ScriptRuntime.setPrivateFieldInternal
+            Object result =
+                    ScriptRuntime.setPrivateFieldInternal(
+                            instance, fieldName, opResult, cx, frame.scope);
+
+            // Update stack: 3 args -> 1 result
+            state.stackTop -= 2;
+            stack[state.stackTop] = result;
+
+            return null;
         }
     }
 

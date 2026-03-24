@@ -2566,6 +2566,9 @@ public class Context implements Closeable {
             if (compiler == null) {
                 compiler = createCompiler();
             }
+            if (compiler == null) {
+                throw new IllegalStateException("No JavaScript compiler available");
+            }
 
             bytecode = compiler.compile(compilerEnv, tree, sourceString, returnFunction);
         } catch (ClassFileFormatException e) {
@@ -2583,6 +2586,9 @@ public class Context implements Closeable {
                             returnFunction);
 
             compiler = createInterpreter();
+            if (compiler == null) {
+                throw new IllegalStateException("No JavaScript interpreter available for fallback");
+            }
             bytecode = compiler.compile(compilerEnv, tree, sourceString, returnFunction);
         }
 

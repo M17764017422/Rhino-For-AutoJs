@@ -154,6 +154,10 @@ public class ScriptNode extends Scope {
     }
 
     public FunctionNode getFunctionNode(int i) {
+        if (functions == null) {
+            throw new IndexOutOfBoundsException(
+                    "Function index " + i + " but functions list is null");
+        }
         return functions.get(i);
     }
 

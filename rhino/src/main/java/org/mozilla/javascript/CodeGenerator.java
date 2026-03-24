@@ -647,6 +647,53 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
                 }
                 break;
 
+            case Token.NEW_CLASS:
+                {
+                    // NEW_CLASS node structure:
+                    // child[0]: className (NAME or NULL)
+                    // child[1]: superClass (expression or NULL)
+                    // child[2]: constructor (FUNCTION)
+                    // child[3]: protoMethods (OBJECTLIT)
+                    // child[4]: staticMethods (OBJECTLIT)
+                    // child[5]: instanceFieldInitFn (FUNCTION)
+                    // child[6]: staticInitFn (FUNCTION)
+
+                    // Visit className
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit superClass
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit constructor
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit protoMethods
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit staticMethods
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit instanceFieldInitFn
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit staticInitFn
+                    visitExpression(child, 0);
+
+                    // Call ScriptRuntime.createClass(cx, scope, className, superClass,
+                    //                                 constructor, protoMethods, staticMethods,
+                    //                                 instanceFieldInitFn, staticInitFn)
+                    addToken(Token.NEW_CLASS);
+                    // Stack: 7 args -> 1 result
+                    stackChange(-6);
+                }
+                break;
+
             case Token.REF_CALL:
             case Token.CALL:
             case Token.NEW:
@@ -1204,6 +1251,51 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
                     resolveForwardGoto(end);
                     break;
                 }
+
+            case Token.PRIVATE_FIELD:
+                // Private field name - push the field name as a string
+                addStringOp(Token.STRING, node.getString());
+                stackChange(1);
+                break;
+
+            case Token.GET_PRIVATE_FIELD:
+                // Get private field value: this.#field
+                // child[0]: target object (usually 'this')
+                // child[1]: field name (string)
+                visitExpression(child, 0);
+                child = child.getNext();
+                visitExpression(child, 0);
+                addToken(Token.GET_PRIVATE_FIELD);
+                stackChange(-1); // 2 args -> 1 result
+                break;
+
+            case Token.SET_PRIVATE_FIELD:
+                // Set private field value: this.#field = value
+                // child[0]: target object (usually 'this')
+                // child[1]: field name (string)
+                // child[2]: value to assign
+                visitExpression(child, 0);
+                child = child.getNext();
+                visitExpression(child, 0);
+                child = child.getNext();
+                visitExpression(child, 0);
+                addToken(Token.SET_PRIVATE_FIELD);
+                stackChange(-2); // 3 args -> 1 result
+                break;
+
+            case Token.SET_PRIVATE_FIELD_OP:
+                // Compound assignment on private field: this.#field += value
+                // child[0]: target object
+                // child[1]: field name (string)
+                // child[2]: operation node (contains operator and right operand)
+                visitExpression(child, 0);
+                child = child.getNext();
+                visitExpression(child, 0);
+                child = child.getNext();
+                visitExpression(child, 0);
+                addToken(Token.SET_PRIVATE_FIELD_OP);
+                stackChange(-2); // 3 args -> 1 result
+                break;
 
             default:
                 throw badTree(node);

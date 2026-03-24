@@ -351,7 +351,9 @@ public class FunctionNode extends ScriptNode {
     }
 
     public List<Node> getResumptionPoints() {
-        return generatorResumePoints;
+        return generatorResumePoints == null
+                ? java.util.Collections.emptyList()
+                : generatorResumePoints;
     }
 
     public Map<Node, int[]> getLiveLocals() {

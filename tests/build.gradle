@@ -125,9 +125,10 @@ tasks.register('test262', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
 
-    maxHeapSize = "1g"
+    // Increase heap size and reduce parallel forks to avoid OOM
+    maxHeapSize = "2g"
     forkEvery = 1
-    maxParallelForks = 64
+    maxParallelForks = 8
 
     systemProperty 'java.awt.headless', 'true'
     systemProperty 'mozilla.js.tests', 'testsrc/tests'
@@ -151,7 +152,7 @@ tasks.register('test262', Test) {
     include '**/Test262SuiteTest.class'
 
     // Test262 needs longer timeout (60 minutes) due to 112k+ tests
-    timeout = java.time.Duration.ofMinutes(60)
+    timeout = java.time.Duration.ofMinutes(90)
 
     System.properties.each { k, v ->
         if (k.startsWith("rhino.")) {
@@ -170,9 +171,10 @@ tasks.register('test262Class', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
 
-    maxHeapSize = "1g"
+    // Increase heap size and reduce parallel forks to avoid OOM
+    maxHeapSize = "2g"
     forkEvery = 1
-    maxParallelForks = 64
+    maxParallelForks = 8
 
     systemProperty 'java.awt.headless', 'true'
     systemProperty 'mozilla.js.tests', 'testsrc/tests'
@@ -192,7 +194,7 @@ tasks.register('test262Class', Test) {
     include '**/ES2022ClassTest262Test.class'
 
     // Class tests need ~15 minutes for 8k+ tests
-    timeout = java.time.Duration.ofMinutes(20)
+    timeout = java.time.Duration.ofMinutes(30)
 
     System.properties.each { k, v ->
         if (k.startsWith("rhino.")) {

@@ -10,6 +10,55 @@ gradle wrapper (`./gradlew`). There are no external dependencies, except for JUn
 3. Format code: `./gradlew spotlessApply`
 4. Checks (tests, formatting): `./gradlew check`
 
+## Troubleshooting
+
+### No JavaScript compiler available
+
+如果测试或运行时出现 `IllegalStateException: No JavaScript compiler available`：
+
+**原因**：`Interpreter` 类静态初始化失败，通常是因为 Token 定义问题。
+
+**检查方法**：
+```java
+// 测试 Codegen 和 Interpreter 是否能正常加载
+Class.forName("org.mozilla.javascript.optimizer.Codegen").getDeclaredConstructor().newInstance();
+Class.forName("org.mozilla.javascript.Interpreter").getDeclaredConstructor().newInstance();
+```
+
+**常见原因**：新增的字节码指令 Token 值大于 `LAST_BYTECODE_TOKEN`，导致 `instructionObjs` 数组越界。
+
+**修复**：确保所有字节码指令 Token（如 `NEW_CLASS`, `GET_PRIVATE_FIELD` 等）定义在 `LAST_BYTECODE_TOKEN` 之前。
+
+### Node.js Heap Out of Memory
+
+如果构建时出现 `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory`：
+
+**方案 1：增加 Node.js 堆内存限制**
+
+```powershell
+$env:NODE_OPTIONS="--max-old-space-size=4096"
+```
+
+**方案 3：分步构建，减少内存压力**
+
+```powershell
+# 设置环境变量
+$env:JAVA_HOME = "F:\AIDE\jdk-21.0.9+10"
+$env:GRADLE_USER_HOME = "F:\AIDE\.gradle"
+$env:TEMP = "F:\AIDE\tmp"
+$env:TMP = "F:\AIDE\tmp"
+$env:NODE_OPTIONS = "--max-old-space-size=4096"
+
+# 先格式化代码
+.\gradlew.bat spotlessApply --no-daemon
+
+# 再编译
+.\gradlew.bat compileJava compileTestJava --no-daemon
+
+# 最后测试
+.\gradlew.bat test --no-daemon
+```
+
 ## Rules and code style
 
 - Important: try to follow the existing code style and patterns.

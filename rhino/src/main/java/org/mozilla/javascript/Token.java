@@ -132,10 +132,17 @@ public class Token {
             REF_NS_MEMBER = REF_MEMBER + 1, // Reference for x.ns::y, x..ns::y etc.
             REF_NAME = REF_NS_MEMBER + 1, // Reference for @y, @[y] etc.
             REF_NS_NAME = REF_NAME + 1, // Reference for ns::y, @ns::y@[y] etc.
-            BIGINT = REF_NS_NAME + 1; // ES2020 BigInt
+            BIGINT = REF_NS_NAME + 1, // ES2020 BigInt
+
+            // ES2022 Class bytecode instructions
+            NEW_CLASS = BIGINT + 1, // IR node for class creation
+            GET_PRIVATE_FIELD = NEW_CLASS + 1, // IR node for private field read
+            SET_PRIVATE_FIELD = GET_PRIVATE_FIELD + 1, // IR node for private field write
+            SET_PRIVATE_FIELD_OP =
+                    SET_PRIVATE_FIELD + 1; // IR node for private field compound assign
 
     // End of interpreter bytecodes
-    public static final int LAST_BYTECODE_TOKEN = BIGINT,
+    public static final int LAST_BYTECODE_TOKEN = SET_PRIVATE_FIELD_OP,
             TRY = LAST_BYTECODE_TOKEN + 1,
             SEMI = TRY + 1, // semicolon
             LB = SEMI + 1, // left and right brackets
@@ -247,17 +254,14 @@ public class Token {
             QUESTION_DOT = NULLISH_COALESCING + 1, // optional chaining operator (?.)
             OBJECT_REST = QUESTION_DOT + 1, // ES6 object rest operation
 
-            // ===== ES2022 Class 支持 =====
+            // ===== ES2022 Class parser tokens =====
+            // Note: NEW_CLASS, GET_PRIVATE_FIELD, SET_PRIVATE_FIELD, SET_PRIVATE_FIELD_OP
+            // are bytecode tokens defined earlier (before LAST_BYTECODE_TOKEN)
             CLASS = OBJECT_REST + 1, // class keyword
             EXTENDS = CLASS + 1, // extends keyword
             CLASS_ELEMENT = EXTENDS + 1, // class element AST node type
             PRIVATE_FIELD = CLASS_ELEMENT + 1, // private field # prefix
-            NEW_CLASS = PRIVATE_FIELD + 1, // IR node for class creation
-            GET_PRIVATE_FIELD = NEW_CLASS + 1, // IR node for private field read
-            SET_PRIVATE_FIELD = GET_PRIVATE_FIELD + 1, // IR node for private field write
-            SET_PRIVATE_FIELD_OP =
-                    SET_PRIVATE_FIELD + 1, // IR node for private field compound assign
-            LAST_TOKEN = SET_PRIVATE_FIELD_OP + 1;
+            LAST_TOKEN = PRIVATE_FIELD + 1;
 
     /**
      * Returns a name for the token. If Rhino is compiled with certain hardcoded debugging flags in

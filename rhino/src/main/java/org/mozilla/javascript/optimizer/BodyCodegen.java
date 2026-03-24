@@ -5130,7 +5130,8 @@ class BodyCodegen {
 
         child = child.getNext();
         // For SET_PRIVATE_FIELD: child is value expression
-        // For SET_PRIVATE_FIELD_OP: child is op node with structure Node(assignOp, USE_STACK, right)
+        // For SET_PRIVATE_FIELD_OP: child is op node with structure Node(assignOp, USE_STACK,
+        // right)
         //   When generateExpression processes the op node:
         //   - USE_STACK does nothing (uses stack top = currentValue)
         //   - Generates right operand

@@ -312,9 +312,7 @@ public class NativeClass extends BaseFunction {
         privateMethods.put(fieldName, method);
     }
 
-    /**
-     * Gets a private static method.
-     */
+    /** Gets a private static method. */
     public Function getPrivateStaticMethod(String fieldName, Object brand) {
         validatePrivateAccess(brand);
         Function method = privateStaticMethods.get(fieldName);
@@ -324,9 +322,7 @@ public class NativeClass extends BaseFunction {
         return method;
     }
 
-    /**
-     * Sets a private static method.
-     */
+    /** Sets a private static method. */
     public void setPrivateStaticMethod(String fieldName, Function method, Object brand) {
         validatePrivateAccess(brand);
         privateStaticMethods.put(fieldName, method);
@@ -334,65 +330,49 @@ public class NativeClass extends BaseFunction {
 
     // ==================== Private Accessor Management ====================
 
-    /**
-     * Gets a private getter.
-     */
+    /** Gets a private getter. */
     public Function getPrivateGetter(String fieldName, Object brand) {
         validatePrivateAccess(brand);
         return privateGetters.get(fieldName);
     }
 
-    /**
-     * Sets a private getter.
-     */
+    /** Sets a private getter. */
     public void setPrivateGetter(String fieldName, Function getter, Object brand) {
         validatePrivateAccess(brand);
         privateGetters.put(fieldName, getter);
     }
 
-    /**
-     * Gets a private setter.
-     */
+    /** Gets a private setter. */
     public Function getPrivateSetter(String fieldName, Object brand) {
         validatePrivateAccess(brand);
         return privateSetters.get(fieldName);
     }
 
-    /**
-     * Sets a private setter.
-     */
+    /** Sets a private setter. */
     public void setPrivateSetter(String fieldName, Function setter, Object brand) {
         validatePrivateAccess(brand);
         privateSetters.put(fieldName, setter);
     }
 
-    /**
-     * Gets a private static getter.
-     */
+    /** Gets a private static getter. */
     public Function getPrivateStaticGetter(String fieldName, Object brand) {
         validatePrivateAccess(brand);
         return privateStaticGetters.get(fieldName);
     }
 
-    /**
-     * Sets a private static getter.
-     */
+    /** Sets a private static getter. */
     public void setPrivateStaticGetter(String fieldName, Function getter, Object brand) {
         validatePrivateAccess(brand);
         privateStaticGetters.put(fieldName, getter);
     }
 
-    /**
-     * Gets a private static setter.
-     */
+    /** Gets a private static setter. */
     public Function getPrivateStaticSetter(String fieldName, Object brand) {
         validatePrivateAccess(brand);
         return privateStaticSetters.get(fieldName);
     }
 
-    /**
-     * Sets a private static setter.
-     */
+    /** Sets a private static setter. */
     public void setPrivateStaticSetter(String fieldName, Function setter, Object brand) {
         validatePrivateAccess(brand);
         privateStaticSetters.put(fieldName, setter);

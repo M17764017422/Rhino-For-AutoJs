@@ -39,6 +39,9 @@ public class Kit {
     }
 
     static Object newInstanceOrNull(Class<?> cl) {
+        if (cl == null) {
+            return null;
+        }
         try {
             return cl.getDeclaredConstructor().newInstance();
         } catch (SecurityException
