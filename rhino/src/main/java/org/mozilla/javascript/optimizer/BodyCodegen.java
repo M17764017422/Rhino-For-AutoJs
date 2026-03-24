@@ -2684,9 +2684,17 @@ class BodyCodegen {
     private void addLoadPropertyId(Node node, Object[] properties, int i) {
         Object id = properties[i];
         if (id instanceof Node) {
-            // Will be a node of type Token.COMPUTED_PROPERTY wrapping the actual expression
-            Node computedPropertyNode = (Node) id;
-            generateExpression(computedPropertyNode.getFirstChild(), node);
+            // Will be a node of type Token.COMPUTED_PROPERTY wrapping the actual expression,
+            // or could be a Name node for private fields
+            Node propNode = (Node) id;
+            Node child = propNode.getFirstChild();
+            if (child != null) {
+                // COMPUTED_PROPERTY node wrapping an expression
+                generateExpression(child, node);
+            } else {
+                // Direct expression node (e.g., Name for private field)
+                generateExpression(propNode, node);
+            }
         } else {
             if (id instanceof String) {
                 cfw.addPush((String) id);
@@ -5106,6 +5114,7 @@ class BodyCodegen {
 
         if (type == Token.SET_PRIVATE_FIELD_OP) {
             // Compound assignment: need to get current value first
+            // Stack: [instance] -> [instance, currentValue]
             cfw.add(ByteCode.DUP); // duplicate instance
             cfw.addPush(fieldNameNode.getString());
             cfw.addALoad(contextLocal);
@@ -5120,14 +5129,14 @@ class BodyCodegen {
         }
 
         child = child.getNext();
-        generateExpression(child, node); // value
-
-        // For compound assignment, we need to perform the operation
-        if (type == Token.SET_PRIVATE_FIELD_OP) {
-            // Stack: ... instance currentValue value
-            // Need to store the operation result
-            throw new RuntimeException("SET_PRIVATE_FIELD_OP not yet implemented");
-        }
+        // For SET_PRIVATE_FIELD: child is value expression
+        // For SET_PRIVATE_FIELD_OP: child is op node with structure Node(assignOp, USE_STACK, right)
+        //   When generateExpression processes the op node:
+        //   - USE_STACK does nothing (uses stack top = currentValue)
+        //   - Generates right operand
+        //   - Executes assignOp(currentValue, right) -> opResult
+        // Stack: [instance, currentValue] -> [instance, opResult]
+        generateExpression(child, node);
 
         cfw.addPush(fieldNameNode.getString());
         cfw.addALoad(contextLocal);

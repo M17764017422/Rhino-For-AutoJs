@@ -2947,12 +2947,17 @@ public class Parser {
                 return expr;
 
             case Token.DELPROP:
-                consumeToken();
-                line = lineNumber();
-                column = columnNumber();
-                node = new UnaryExpression(tt, ts.tokenBeg, unaryExpr());
-                node.setLineColumnNumber(line, column);
-                return node;
+                {
+                    consumeToken();
+                    line = lineNumber();
+                    column = columnNumber();
+                    AstNode operand = unaryExpr();
+                    // ES2022: Cannot delete private fields
+                    checkDeletePrivateField(operand);
+                    node = new UnaryExpression(tt, ts.tokenBeg, operand);
+                    node.setLineColumnNumber(line, column);
+                    return node;
+                }
 
             case Token.ERROR:
                 consumeToken();
@@ -3302,6 +3307,12 @@ public class Parser {
             case Token.PRIVATE_FIELD:
                 // Private field access: obj.#field or this.#field
                 // TokenStream has already consumed the entire #name
+                // ES2022: Cannot access private field on super
+                if (pn.getType() == Token.SUPER) {
+                    Name privateName = createNameNode(true, Token.PRIVATE_FIELD);
+                    reportError("msg.class.super.private.access", privateName.getIdentifier());
+                    return makeErrorNode();
+                }
                 ref = createNameNode(true, Token.PRIVATE_FIELD);
                 break;
 
@@ -4499,6 +4510,22 @@ public class Parser {
             reportError(expr.getType() == Token.INC ? "msg.bad.incr" : "msg.bad.decr");
     }
 
+    /**
+     * Check if delete operand contains private field access. ES2022: Cannot delete private fields.
+     */
+    private void checkDeletePrivateField(AstNode operand) {
+        operand = removeParens(operand);
+        // Check for direct private field access: delete this.#field
+        if (operand instanceof PropertyGet) {
+            PropertyGet pg = (PropertyGet) operand;
+            if (pg.getProperty().getType() == Token.PRIVATE_FIELD) {
+                reportError("msg.delete.private.field", pg.getProperty().getIdentifier());
+            }
+        }
+        // Check for computed private field or other forms
+        // Note: Private field in element access (obj.#field) is already a syntax error
+    }
+
     private ErrorNode makeErrorNode() {
         ErrorNode pn = new ErrorNode(ts.tokenBeg, ts.tokenEnd - ts.tokenBeg);
         pn.setLineColumnNumber(lineNumber(), columnNumber());
@@ -5574,6 +5601,12 @@ public class Parser {
         boolean hasConstructor = false;
         boolean hasStaticBlock = false;
 
+        // ES2022: Track private names for duplicate detection
+        // Map of private name -> element type (for getter/setter pair detection)
+        java.util.Map<String, ClassElement> privateGetters = new java.util.HashMap<>();
+        java.util.Map<String, ClassElement> privateSetters = new java.util.HashMap<>();
+        java.util.Set<String> otherPrivateNames = new java.util.HashSet<>();
+
         while (true) {
             int tt = peekToken();
             if (tt == Token.RC || tt == Token.EOF || tt == Token.ERROR) {
@@ -5588,6 +5621,46 @@ public class Parser {
                         reportError("msg.class.duplicate.constructor");
                     }
                     hasConstructor = true;
+                }
+
+                // ES2022: Check for duplicate private names
+                // Rule: Private names must be unique unless it's a getter/setter pair
+                if (element.isPrivate()) {
+                    String privateName = element.getKeyString();
+                    if (privateName != null) {
+                        boolean isDuplicate = false;
+
+                        if (element.isGetter()) {
+                            // Getter: can coexist with setter for same name
+                            if (privateGetters.containsKey(privateName)
+                                    || otherPrivateNames.contains(privateName)) {
+                                isDuplicate = true;
+                            } else {
+                                privateGetters.put(privateName, element);
+                            }
+                        } else if (element.isSetter()) {
+                            // Setter: can coexist with getter for same name
+                            if (privateSetters.containsKey(privateName)
+                                    || otherPrivateNames.contains(privateName)) {
+                                isDuplicate = true;
+                            } else {
+                                privateSetters.put(privateName, element);
+                            }
+                        } else {
+                            // Field or method: cannot have any duplicate
+                            if (privateGetters.containsKey(privateName)
+                                    || privateSetters.containsKey(privateName)
+                                    || otherPrivateNames.contains(privateName)) {
+                                isDuplicate = true;
+                            } else {
+                                otherPrivateNames.add(privateName);
+                            }
+                        }
+
+                        if (isDuplicate) {
+                            reportError("msg.class.duplicate.private.name", privateName);
+                        }
+                    }
                 }
 
                 // Note: ES2022 allows multiple static initialization blocks

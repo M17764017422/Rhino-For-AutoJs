@@ -6341,7 +6341,6 @@ public class ScriptRuntime {
     }
 
     private static int detectAndroidApi() {
-
         try {
             Class<?> versionClass = Class.forName("android.os.Build$VERSION");
             Field sdkInt = versionClass.getField("SDK_INT");
@@ -6538,7 +6537,31 @@ public class ScriptRuntime {
             if (constructor instanceof NativeClass) {
                 NativeClass classObj = (NativeClass) constructor;
                 Object brand = classObj.getClassBrand();
-                return classObj.getPrivateField(instance, fieldName, brand);
+
+                // 1. Check for private field first
+                try {
+                    return classObj.getPrivateField(instance, fieldName, brand);
+                } catch (EcmaError e) {
+                    // Field not found, continue to check other types
+                    if (!e.getMessage().contains("not found")) {
+                        throw e;
+                    }
+                }
+
+                // 2. Check for private method
+                Function method = classObj.getPrivateMethod(fieldName, brand);
+                if (method != null) {
+                    return method;
+                }
+
+                // 3. Check for private getter
+                Function getter = classObj.getPrivateGetter(fieldName, brand);
+                if (getter != null) {
+                    return getter.call(cx, scope, (Scriptable) instance, emptyArgs);
+                }
+
+                // Not found
+                throw referenceErrorById("msg.class.private.field.not.found", fieldName);
             }
         }
         throw constructError(
@@ -6565,6 +6588,15 @@ public class ScriptRuntime {
             if (constructor instanceof NativeClass) {
                 NativeClass classObj = (NativeClass) constructor;
                 Object brand = classObj.getClassBrand();
+
+                // 1. Check for private setter first
+                Function setter = classObj.getPrivateSetter(fieldName, brand);
+                if (setter != null) {
+                    setter.call(cx, scope, (Scriptable) instance, new Object[] {value});
+                    return value;
+                }
+
+                // 2. Set private field value
                 classObj.setPrivateField(instance, fieldName, value, brand);
                 return value;
             }

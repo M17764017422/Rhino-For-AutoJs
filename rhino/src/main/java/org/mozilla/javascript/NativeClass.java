@@ -45,6 +45,24 @@ public class NativeClass extends BaseFunction {
     /** Static private field storage: fieldName -> value */
     private final Map<String, Object> staticPrivateFields;
 
+    /** Private method storage: fieldName -> Function (shared across instances) */
+    private final Map<String, Function> privateMethods;
+
+    /** Private static method storage: fieldName -> Function */
+    private final Map<String, Function> privateStaticMethods;
+
+    /** Private getter storage: fieldName -> Function */
+    private final Map<String, Function> privateGetters;
+
+    /** Private setter storage: fieldName -> Function */
+    private final Map<String, Function> privateSetters;
+
+    /** Private static getter storage: fieldName -> Function */
+    private final Map<String, Function> privateStaticGetters;
+
+    /** Private static setter storage: fieldName -> Function */
+    private final Map<String, Function> privateStaticSetters;
+
     /** Instance field initializers: fieldName -> initializer function */
     private Scriptable instanceFieldInitializers;
 
@@ -73,6 +91,13 @@ public class NativeClass extends BaseFunction {
         this.isDerived = superClass != null;
         this.privateFieldStorage = new ConcurrentHashMap<>();
         this.staticPrivateFields = new ConcurrentHashMap<>();
+        // Initialize private method and accessor storage
+        this.privateMethods = new ConcurrentHashMap<>();
+        this.privateStaticMethods = new ConcurrentHashMap<>();
+        this.privateGetters = new ConcurrentHashMap<>();
+        this.privateSetters = new ConcurrentHashMap<>();
+        this.privateStaticGetters = new ConcurrentHashMap<>();
+        this.privateStaticSetters = new ConcurrentHashMap<>();
 
         setParentScope(scope);
         setFunctionName(className != null ? className : "");
@@ -255,6 +280,136 @@ public class NativeClass extends BaseFunction {
     public void setStaticPrivateField(String fieldName, Object value, Object brand) {
         validatePrivateAccess(brand);
         staticPrivateFields.put(fieldName, value);
+    }
+
+    // ==================== Private Method Management ====================
+
+    /**
+     * Gets a private method.
+     *
+     * @param fieldName the private method name (without # prefix)
+     * @param brand the expected class brand for validation
+     * @return the method function
+     */
+    public Function getPrivateMethod(String fieldName, Object brand) {
+        validatePrivateAccess(brand);
+        Function method = privateMethods.get(fieldName);
+        if (method == null) {
+            throw ScriptRuntime.referenceErrorById("msg.class.private.method.access", fieldName);
+        }
+        return method;
+    }
+
+    /**
+     * Sets a private method.
+     *
+     * @param fieldName the private method name (without # prefix)
+     * @param method the method function
+     * @param brand the expected class brand for validation
+     */
+    public void setPrivateMethod(String fieldName, Function method, Object brand) {
+        validatePrivateAccess(brand);
+        privateMethods.put(fieldName, method);
+    }
+
+    /**
+     * Gets a private static method.
+     */
+    public Function getPrivateStaticMethod(String fieldName, Object brand) {
+        validatePrivateAccess(brand);
+        Function method = privateStaticMethods.get(fieldName);
+        if (method == null) {
+            throw ScriptRuntime.referenceErrorById("msg.class.private.method.access", fieldName);
+        }
+        return method;
+    }
+
+    /**
+     * Sets a private static method.
+     */
+    public void setPrivateStaticMethod(String fieldName, Function method, Object brand) {
+        validatePrivateAccess(brand);
+        privateStaticMethods.put(fieldName, method);
+    }
+
+    // ==================== Private Accessor Management ====================
+
+    /**
+     * Gets a private getter.
+     */
+    public Function getPrivateGetter(String fieldName, Object brand) {
+        validatePrivateAccess(brand);
+        return privateGetters.get(fieldName);
+    }
+
+    /**
+     * Sets a private getter.
+     */
+    public void setPrivateGetter(String fieldName, Function getter, Object brand) {
+        validatePrivateAccess(brand);
+        privateGetters.put(fieldName, getter);
+    }
+
+    /**
+     * Gets a private setter.
+     */
+    public Function getPrivateSetter(String fieldName, Object brand) {
+        validatePrivateAccess(brand);
+        return privateSetters.get(fieldName);
+    }
+
+    /**
+     * Sets a private setter.
+     */
+    public void setPrivateSetter(String fieldName, Function setter, Object brand) {
+        validatePrivateAccess(brand);
+        privateSetters.put(fieldName, setter);
+    }
+
+    /**
+     * Gets a private static getter.
+     */
+    public Function getPrivateStaticGetter(String fieldName, Object brand) {
+        validatePrivateAccess(brand);
+        return privateStaticGetters.get(fieldName);
+    }
+
+    /**
+     * Sets a private static getter.
+     */
+    public void setPrivateStaticGetter(String fieldName, Function getter, Object brand) {
+        validatePrivateAccess(brand);
+        privateStaticGetters.put(fieldName, getter);
+    }
+
+    /**
+     * Gets a private static setter.
+     */
+    public Function getPrivateStaticSetter(String fieldName, Object brand) {
+        validatePrivateAccess(brand);
+        return privateStaticSetters.get(fieldName);
+    }
+
+    /**
+     * Sets a private static setter.
+     */
+    public void setPrivateStaticSetter(String fieldName, Function setter, Object brand) {
+        validatePrivateAccess(brand);
+        privateStaticSetters.put(fieldName, setter);
+    }
+
+    /**
+     * Checks if a private member (field, method, or accessor) exists.
+     *
+     * @param fieldName the private member name (without # prefix)
+     * @param brand the expected class brand for validation
+     * @return true if the member exists
+     */
+    public boolean hasPrivateMember(String fieldName, Object brand) {
+        validatePrivateAccess(brand);
+        return privateMethods.containsKey(fieldName)
+                || privateGetters.containsKey(fieldName)
+                || privateSetters.containsKey(fieldName);
     }
 
     /** Validates that the provided brand matches this class's brand. */
