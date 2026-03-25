@@ -119,6 +119,10 @@ public class NativeClass extends BaseFunction {
         }
         defineProperty("prototype", classPrototype, DONTENUM | PERMANENT);
 
+        // Also set the prototypeProperty field so that .prototype access works correctly
+        // BaseFunction.prototypeGetter uses getPrototypeProperty() which reads this field
+        setPrototypeProperty(classPrototype);
+
         // Set constructor reference on prototype
         ScriptableObject.putProperty(classPrototype, "constructor", this);
 

@@ -813,7 +813,8 @@ public final class IRFactory {
                         if (keyNode.getType() == Token.STRING) {
                             staticKeys.add(keyNode.getString());
                         } else if (keyNode.getType() == Token.NUMBER) {
-                            staticKeys.add((int) keyNode.getDouble());
+                            // Convert number to string for property key (ES spec behavior)
+                            staticKeys.add(ScriptRuntime.numberToString(keyNode.getDouble(), 10));
                         } else {
                             staticKeys.add(keyNode);
                         }
@@ -831,7 +832,8 @@ public final class IRFactory {
                         if (keyNode.getType() == Token.STRING) {
                             protoKeys.add(keyNode.getString());
                         } else if (keyNode.getType() == Token.NUMBER) {
-                            protoKeys.add((int) keyNode.getDouble());
+                            // Convert number to string for property key (ES spec behavior)
+                            protoKeys.add(ScriptRuntime.numberToString(keyNode.getDouble(), 10));
                         } else {
                             protoKeys.add(keyNode);
                         }
@@ -1061,7 +1063,9 @@ public final class IRFactory {
         } else if (key instanceof NumberLiteral) {
             return Node.newNumber(((NumberLiteral) key).getNumber());
         } else if (key instanceof ComputedPropertyKey) {
-            return transform(((ComputedPropertyKey) key).getExpression());
+            // Use transform(key) instead of transform(key.getExpression()) to properly
+            // wrap the expression in a COMPUTED_PROPERTY node
+            return transform(key);
         }
         return transform(key);
     }

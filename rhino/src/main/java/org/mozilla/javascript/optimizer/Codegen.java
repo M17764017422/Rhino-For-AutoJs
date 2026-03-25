@@ -864,8 +864,10 @@ public class Codegen implements Evaluator {
     /**
      * List of illegal characters in unqualified names as specified in
      * https://docs.oracle.com/javase/specs/jvms/se25/html/jvms-4.html#jvms-4.2.2
+     * Also includes space, minus, plus, and other characters that would make
+     * invalid Java identifiers.
      */
-    private static Pattern illegalChars = Pattern.compile("[.;\\[/<>]");
+    private static Pattern illegalChars = Pattern.compile("[.;\\[/<>\\s\\-+]");
 
     /** Gets a Java-compatible "informative" name for the ScriptOrFnNode */
     String cleanName(final ScriptNode n) {
@@ -880,7 +882,12 @@ public class Codegen implements Evaluator {
         } else {
             result = "script";
         }
-        return illegalChars.matcher(result).replaceAll("_");
+        result = illegalChars.matcher(result).replaceAll("_");
+        // Handle names starting with a digit by prefixing with underscore
+        if (result.length() > 0 && Character.isDigit(result.charAt(0))) {
+            result = "_" + result;
+        }
+        return result;
     }
 
     String getNonDirectBodyMethodSIgnature(ScriptNode n) {

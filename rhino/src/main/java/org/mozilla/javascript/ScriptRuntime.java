@@ -6431,10 +6431,14 @@ public class ScriptRuntime {
                         classPrototypeObj.defineOwnProperty(cx, id, desc);
                     }
                 } else if (id instanceof Number) {
-                    // Handle numeric keys (includes Integer and other Number types)
-                    int idx = ((Number) id).intValue();
-                    Object method = protoMethods.get(idx, protoMethods);
-                    classPrototype.put(idx, classPrototype, method);
+                    // Handle numeric keys - use getOwnPropertyDescriptor to preserve getter/setter
+                    ScriptableObject.DescriptorInfo desc =
+                            protoMethodsObj.getOwnPropertyDescriptor(cx, id);
+                    if (desc != null) {
+                        // Make the property non-enumerable per ES2022 spec
+                        desc.enumerable = Boolean.FALSE;
+                        classPrototypeObj.defineOwnProperty(cx, id, desc);
+                    }
                 }
             }
         }
@@ -6454,10 +6458,14 @@ public class ScriptRuntime {
                         classObj.defineOwnProperty(cx, id, desc);
                     }
                 } else if (id instanceof Number) {
-                    // Handle numeric keys (includes Integer and other Number types)
-                    int idx = ((Number) id).intValue();
-                    Object method = staticMethods.get(idx, staticMethods);
-                    classObj.put(idx, classObj, method);
+                    // Handle numeric keys - use getOwnPropertyDescriptor to preserve getter/setter
+                    ScriptableObject.DescriptorInfo desc =
+                            staticMethodsObj.getOwnPropertyDescriptor(cx, id);
+                    if (desc != null) {
+                        // Make the property non-enumerable per ES2022 spec
+                        desc.enumerable = Boolean.FALSE;
+                        classObj.defineOwnProperty(cx, id, desc);
+                    }
                 }
             }
         }

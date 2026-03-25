@@ -5239,7 +5239,8 @@ public class Parser {
                 rightElem = new Node(Token.GETPROP, createName(tempName), s);
                 extractedKeys.add(keyName);
             } else if (id instanceof NumberLiteral) {
-                Node s = createNumber((int) ((NumberLiteral) id).getNumber());
+                // Use double value for numeric keys to preserve decimals
+                Node s = createNumber(((NumberLiteral) id).getNumber());
                 rightElem = new Node(Token.GETELEM, createName(tempName), s);
             } else if (id instanceof ComputedPropertyKey) {
                 // handle computed property key: [...key]
