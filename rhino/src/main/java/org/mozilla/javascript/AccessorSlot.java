@@ -76,6 +76,11 @@ public class AccessorSlot extends Slot {
             desc.setter = Undefined.instance;
         }
 
+        // Update accessorDescriptor flag based on actual getter/setter presence
+        desc.accessorDescriptor =
+                desc.getter != ScriptableObject.NOT_FOUND
+                        || desc.setter != ScriptableObject.NOT_FOUND;
+
         if (es6) {
             desc.enumerable = (attr & ScriptableObject.DONTENUM) == 0;
             desc.configurable = (attr & ScriptableObject.PERMANENT) == 0;

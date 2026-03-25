@@ -817,8 +817,14 @@ public final class IRFactory {
                         } else {
                             staticKeys.add(keyNode);
                         }
-                        // Mark as method
-                        staticValues.add(createUnary(Token.METHOD, methodNode));
+                        // Mark as getter/setter/method
+                        if (element.isGetter()) {
+                            staticValues.add(createUnary(Token.GET, methodNode));
+                        } else if (element.isSetter()) {
+                            staticValues.add(createUnary(Token.SET, methodNode));
+                        } else {
+                            staticValues.add(createUnary(Token.METHOD, methodNode));
+                        }
                     } else {
                         // Instance method
                         Node keyNode = createPropertyKeyNode(element);
@@ -829,8 +835,14 @@ public final class IRFactory {
                         } else {
                             protoKeys.add(keyNode);
                         }
-                        // Mark as method
-                        protoValues.add(createUnary(Token.METHOD, methodNode));
+                        // Mark as getter/setter/method
+                        if (element.isGetter()) {
+                            protoValues.add(createUnary(Token.GET, methodNode));
+                        } else if (element.isSetter()) {
+                            protoValues.add(createUnary(Token.SET, methodNode));
+                        } else {
+                            protoValues.add(createUnary(Token.METHOD, methodNode));
+                        }
                     }
                 } else if (element.isField()) {
                     AstNode fieldValue = element.getFieldValue();

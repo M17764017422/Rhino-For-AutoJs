@@ -146,6 +146,8 @@ public class Parser {
     // during function parsing.  See PerFunctionVariables class below.
     ScriptNode currentScriptOrFn;
     private boolean insideMethod;
+    private ClassNode currentClass; // Track current class for super() validation
+    private boolean insideDerivedConstructor; // True when parsing constructor of a derived class
     Scope currentScope;
     private int endFlags;
     private boolean inForInit; // bound temporarily during forStatement()
@@ -3190,6 +3192,12 @@ public class Parser {
             throws IOException {
         consumeToken();
         checkCallRequiresActivation(pn);
+
+        // Validate super() call - only allowed in derived class constructors
+        if (pn.getType() == Token.SUPER && !insideDerivedConstructor) {
+            reportError("msg.super.shorthand.function");
+        }
+
         FunctionCall f = new FunctionCall(pos);
         f.setTarget(pn);
         f.setLp(ts.tokenBeg - pos);
@@ -3610,11 +3618,8 @@ public class Parser {
                 // 1. Object literal shorthand methods (insideMethod = true)
                 // 2. Class methods and constructors (insideMethod = true)
                 // 3. When explicitly allowed by compilerEnv
-                // 4. ES6+ class constructors (inside function body with ES6+)
                 if (((insideFunctionParams() || insideFunctionBody()) && insideMethod)
-                        || compilerEnv.isAllowSuper()
-                        || (compilerEnv.getLanguageVersion() >= Context.VERSION_ES6
-                                && (insideFunctionParams() || insideFunctionBody()))) {
+                        || compilerEnv.isAllowSuper()) {
                     consumeToken();
                     pos = ts.tokenBeg;
                     end = ts.tokenEnd;
@@ -5598,6 +5603,9 @@ public class Parser {
      * and empty statements.
      */
     private void parseClassBody(ClassNode classNode) throws IOException {
+        ClassNode savedCurrentClass = currentClass;
+        currentClass = classNode;
+
         boolean hasConstructor = false;
         boolean hasStaticBlock = false;
 
@@ -5669,6 +5677,7 @@ public class Parser {
                 classNode.addElement(element);
             }
         }
+        currentClass = savedCurrentClass;
     }
 
     /** Parse a class element: method, field, or static block. */
@@ -5879,14 +5888,30 @@ public class Parser {
         key.setParent(element);
         element.setLineColumnNumber(lineno, column);
 
+        // Track if this is a constructor of a derived class
+        boolean isConstructor = !isStatic && "constructor".equals(getKeyString(key));
+        boolean wasInsideDerivedConstructor = insideDerivedConstructor;
+        if (isConstructor && currentClass != null && currentClass.hasSuperClass()) {
+            insideDerivedConstructor = true;
+        }
+
         // Parse method (already at '(')
         FunctionNode method = function(FunctionNode.FUNCTION_EXPRESSION, true);
         if (isGenerator) {
             method.setIsES6Generator();
         }
         // Mark as constructor if name is "constructor" and not static
-        if (!isStatic && "constructor".equals(getKeyString(key))) {
+        if (isConstructor) {
             method.putIntProp(Node.CONSTRUCTOR_METHOD, 1);
+        }
+
+        // Restore insideDerivedConstructor
+        insideDerivedConstructor = wasInsideDerivedConstructor;
+
+        // Set method name for ES2022 spec compliance
+        String methodName = getKeyString(key);
+        if (methodName != null) {
+            method.setFunctionName(new Name(0, methodName));
         }
 
         element.setMethod(method);
@@ -5914,6 +5939,12 @@ public class Parser {
             method.setFunctionIsGetterMethod();
         } else {
             method.setFunctionIsSetterMethod();
+        }
+
+        // Set accessor name for ES2022 spec compliance: "get methodName" or "set methodName"
+        String accessorName = getKeyString(key);
+        if (accessorName != null) {
+            method.setFunctionName(new Name(0, (isGetter ? "get " : "set ") + accessorName));
         }
 
         element.setMethod(method);

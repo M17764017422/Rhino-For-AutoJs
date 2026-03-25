@@ -6414,43 +6414,50 @@ public class ScriptRuntime {
             classObj.setStaticBlocks(staticInitFn);
         }
 
-        // Add prototype methods to class.prototype
-        if (protoMethods != null) {
+        // Add prototype methods to class.prototype (non-enumerable per ES2022 spec)
+        if (protoMethods != null && protoMethods instanceof ScriptableObject) {
+            ScriptableObject protoMethodsObj = (ScriptableObject) protoMethods;
             Scriptable classPrototype = (Scriptable) classObj.get("prototype", classObj);
+            ScriptableObject classPrototypeObj = (ScriptableObject) classPrototype;
             Object[] ids = protoMethods.getIds();
             for (Object id : ids) {
-                Object method;
                 if (id instanceof String) {
-                    method = protoMethods.get((String) id, protoMethods);
-                    ScriptableObject.putProperty(classPrototype, (String) id, method);
-                } else if (id instanceof Integer) {
-                    method = protoMethods.get((Integer) id, protoMethods);
-                    ScriptableObject.putProperty(classPrototype, (Integer) id, method);
+                    // Use getOwnPropertyDescriptor to preserve getter/setter
+                    ScriptableObject.DescriptorInfo desc =
+                            protoMethodsObj.getOwnPropertyDescriptor(cx, id);
+                    if (desc != null) {
+                        // Make the property non-enumerable per ES2022 spec
+                        desc.enumerable = Boolean.FALSE;
+                        classPrototypeObj.defineOwnProperty(cx, id, desc);
+                    }
                 } else if (id instanceof Number) {
-                    // Handle numeric keys
+                    // Handle numeric keys (includes Integer and other Number types)
                     int idx = ((Number) id).intValue();
-                    method = protoMethods.get(idx, protoMethods);
-                    ScriptableObject.putProperty(classPrototype, idx, method);
+                    Object method = protoMethods.get(idx, protoMethods);
+                    classPrototype.put(idx, classPrototype, method);
                 }
             }
         }
 
-        // Add static methods to the class itself
-        if (staticMethods != null) {
+        // Add static methods to the class itself (non-enumerable per ES2022 spec)
+        if (staticMethods != null && staticMethods instanceof ScriptableObject) {
+            ScriptableObject staticMethodsObj = (ScriptableObject) staticMethods;
             Object[] ids = staticMethods.getIds();
             for (Object id : ids) {
-                Object method;
                 if (id instanceof String) {
-                    method = staticMethods.get((String) id, staticMethods);
-                    ScriptableObject.putProperty(classObj, (String) id, method);
-                } else if (id instanceof Integer) {
-                    method = staticMethods.get((Integer) id, staticMethods);
-                    ScriptableObject.putProperty(classObj, (Integer) id, method);
+                    // Use getOwnPropertyDescriptor to preserve getter/setter
+                    ScriptableObject.DescriptorInfo desc =
+                            staticMethodsObj.getOwnPropertyDescriptor(cx, id);
+                    if (desc != null) {
+                        // Make the property non-enumerable per ES2022 spec
+                        desc.enumerable = Boolean.FALSE;
+                        classObj.defineOwnProperty(cx, id, desc);
+                    }
                 } else if (id instanceof Number) {
-                    // Handle numeric keys
+                    // Handle numeric keys (includes Integer and other Number types)
                     int idx = ((Number) id).intValue();
-                    method = staticMethods.get(idx, staticMethods);
-                    ScriptableObject.putProperty(classObj, idx, method);
+                    Object method = staticMethods.get(idx, staticMethods);
+                    classObj.put(idx, classObj, method);
                 }
             }
         }

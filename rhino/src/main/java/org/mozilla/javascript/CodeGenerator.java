@@ -1638,9 +1638,12 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
             if (propertyId instanceof Node) {
                 // Will be a node of type Token.COMPUTED_PROPERTY wrapping the actual expression
                 Node computedPropertyNode = (Node) propertyId;
-                visitExpression(computedPropertyNode.first, 0);
-                addIcode(Icode_LITERAL_KEY_SET);
-                stackChange(-1);
+                Node exprNode = computedPropertyNode.getFirstChild();
+                if (exprNode != null) {
+                    visitExpression(exprNode, 0);
+                    addIcode(Icode_LITERAL_KEY_SET);
+                    stackChange(-1);
+                }
             }
 
             // Value

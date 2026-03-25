@@ -172,9 +172,13 @@ tasks.register('test262Class', Test) {
     classpath = sourceSets.test.runtimeClasspath
 
     // Increase heap size and reduce parallel forks to avoid OOM
-    maxHeapSize = "2g"
+    // Reference: ISOLATED_BUILD_GUIDE.md recommends 2-6GB for Gradle JVM
+    maxHeapSize = "4g"
     forkEvery = 1
-    maxParallelForks = 8
+    maxParallelForks = 4
+
+    // JVM optimization: Use ParallelGC for better throughput
+    jvmArgs += ['-XX:+UseParallelGC']
 
     systemProperty 'java.awt.headless', 'true'
     systemProperty 'mozilla.js.tests', 'testsrc/tests'
