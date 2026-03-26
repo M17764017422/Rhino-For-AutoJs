@@ -1505,6 +1505,7 @@ class BodyCodegen {
 
             case Token.GET_PRIVATE_FIELD:
                 visitGetPrivateField(node, child);
+
                 break;
 
             case Token.GETVAR:
@@ -1542,8 +1543,10 @@ class BodyCodegen {
                 break;
 
             case Token.SET_PRIVATE_FIELD:
+
             case Token.SET_PRIVATE_FIELD_OP:
                 visitSetPrivateField(type, node, child);
+
                 break;
 
             case Token.SET_REF:
@@ -5205,9 +5208,13 @@ class BodyCodegen {
      * <p>Stack: [... target] -> [... value]
      */
     private void visitGetPrivateField(Node node, Node child) {
+
         // Generate: ScriptRuntime.getPrivateField(instance, fieldName, cx, scope)
+
         generateExpression(child, node); // instance (this)
+
         Node fieldNameNode = child.getNext();
+
         cfw.addPush(fieldNameNode.getString()); // fieldName
 
         // Push context and scope for class lookup

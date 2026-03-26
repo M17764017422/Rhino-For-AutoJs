@@ -1232,10 +1232,34 @@ public final class IRFactory {
         privateFieldKeys.add(storageName);
         privateFieldValues.add(valueNode);
 
+        // Add instance field initialization for non-static auto-accessors
+        // This ensures the private backing field is initialized when an instance is created
+        if (!element.isStatic()) {
+            // Create: this.#storage = <valueNode>
+            KeywordLiteral thisLiteral = new KeywordLiteral();
+            thisLiteral.setType(Token.THIS);
+            Node thisNode = transform(thisLiteral);
+            Node fieldNameNode = Node.newString(storageName);
+
+            // SET_PRIVATE_FIELD takes (instance, fieldName, value) as children
+            Node setPrivateField =
+                    new Node(Token.SET_PRIVATE_FIELD, thisNode, fieldNameNode, valueNode);
+
+            Node fieldInit = new Node(Token.EXPR_VOID, setPrivateField);
+            instanceFields.addChildToBack(fieldInit);
+        }
+
         // Create getter function
         FunctionNode getterFn = new FunctionNode();
         getterFn.setSourceName(parser.currentScriptOrFn.getNextTempName());
         getterFn.setFunctionIsGetterMethod();
+        // Note: Do NOT set setMethodDefinition(true) here, as it would cause visitFunction
+        // to use savedHomeObjectLocal which is not initialized in this context (-1).
+        // The getter will be properly wrapped with Token.GET during class construction.
+        // Set requiresActivation to avoid hasVarsInRegs mode, which causes bytecode generation
+        // issues
+        // for dynamically created getter functions that access private fields.
+        getterFn.setRequiresActivation();
         Node getterBody = createAutoAccessorGetterNode(storageName);
         Node getterNode =
                 initFunction(
@@ -1248,7 +1272,13 @@ public final class IRFactory {
         FunctionNode setterFn = new FunctionNode();
         setterFn.setSourceName(parser.currentScriptOrFn.getNextTempName());
         setterFn.setFunctionIsSetterMethod();
-        setterFn.addParam(new Name(0, "value"));
+        // Note: Do NOT set setMethodDefinition(true) for the same reason as getter.
+        // Set requiresActivation to avoid bytecode generation issues
+        setterFn.setRequiresActivation();
+        // Add parameter and register it in the symbol table
+        Name valueParam = new Name(0, "value");
+        setterFn.addParam(valueParam);
+        setterFn.putSymbol(new Symbol(Token.LP, "value"));
         Node setterBody = createAutoAccessorSetterNode(storageName);
         Node setterNode =
                 initFunction(
