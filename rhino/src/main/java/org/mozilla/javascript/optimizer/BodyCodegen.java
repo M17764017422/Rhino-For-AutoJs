@@ -1801,109 +1801,152 @@ class BodyCodegen {
                 break;
 
             case Token.NEW_CLASS:
-                // Class creation: call ScriptRuntime.createClass
-                // The NEW_CLASS node structure:
-                //   child0: class name (NAME or NULL)
-                //   child1: super class (expression or NULL)
-                //   child2: constructor (FUNCTION)
-                //   child3: prototype methods (OBJECTLIT)
-                //   child4: static methods (OBJECTLIT)
-                //   child5: instance field init function (FUNCTION or NULL)
-                //   child6: static fields (BLOCK)
-                //   child7: static blocks (BLOCK)
+                // Class creation: call ScriptRuntime.createClass then initPrivateMembers
+                // The NEW_CLASS node structure (14 children):
+                //   child0:  className (NAME or NULL)
+                //   child1:  superClass (expression or NULL)
+                //   child2:  constructor (FUNCTION)
+                //   child3:  protoMethods (OBJECTLIT)
+                //   child4:  staticMethods (OBJECTLIT)
+                //   child5:  privateMethods (OBJECTLIT)
+                //   child6:  privateStaticMethods (OBJECTLIT)
+                //   child7:  privateGetters (OBJECTLIT)
+                //   child8:  privateSetters (OBJECTLIT)
+                //   child9:  privateStaticGetters (OBJECTLIT)
+                //   child10: privateStaticSetters (OBJECTLIT)
+                //   child11: privateFields (OBJECTLIT)
+                //   child12: instanceFieldInitFn (FUNCTION or NULL)
+                //   child13: staticInitFn (FUNCTION or NULL)
                 {
+                    // Allocate a local variable to store the class object temporarily
+                    short classObjLocal = getNewWordLocal();
+
+                    // Get all children first
+                    Node nameChild = child;
+                    Node superChild = null;
+                    Node ctorChild = null;
+                    Node protoMethodsChild = null;
+                    Node staticMethodsChild = null;
+                    Node privateMethodsChild = null;
+                    Node privateStaticMethodsChild = null;
+                    Node privateGettersChild = null;
+                    Node privateSettersChild = null;
+                    Node privateStaticGettersChild = null;
+                    Node privateStaticSettersChild = null;
+                    Node privateFieldsChild = null;
+                    Node instanceFieldInitFnChild = null;
+                    Node staticInitFnChild = null;
+
+                    // Parse children in order
+                    if (nameChild != null) {
+                        if (nameChild.getType() == Token.NAME
+                                || nameChild.getType() == Token.NULL) {
+                            // nameChild is the class name node
+                            superChild = nameChild.getNext();
+                        } else {
+                            superChild = nameChild;
+                            nameChild = null;
+                        }
+                    }
+
+                    if (superChild != null) {
+                        ctorChild = superChild.getNext();
+                    }
+                    if (ctorChild != null) {
+                        protoMethodsChild = ctorChild.getNext();
+                    }
+                    if (protoMethodsChild != null) {
+                        staticMethodsChild = protoMethodsChild.getNext();
+                    }
+                    if (staticMethodsChild != null) {
+                        privateMethodsChild = staticMethodsChild.getNext();
+                    }
+                    if (privateMethodsChild != null) {
+                        privateStaticMethodsChild = privateMethodsChild.getNext();
+                    }
+                    if (privateStaticMethodsChild != null) {
+                        privateGettersChild = privateStaticMethodsChild.getNext();
+                    }
+                    if (privateGettersChild != null) {
+                        privateSettersChild = privateGettersChild.getNext();
+                    }
+                    if (privateSettersChild != null) {
+                        privateStaticGettersChild = privateSettersChild.getNext();
+                    }
+                    if (privateStaticGettersChild != null) {
+                        privateStaticSettersChild = privateStaticGettersChild.getNext();
+                    }
+                    if (privateStaticSettersChild != null) {
+                        privateFieldsChild = privateStaticSettersChild.getNext();
+                    }
+                    if (privateFieldsChild != null) {
+                        instanceFieldInitFnChild = privateFieldsChild.getNext();
+                    }
+                    if (instanceFieldInitFnChild != null) {
+                        staticInitFnChild = instanceFieldInitFnChild.getNext();
+                    }
+
+                    // === Step 1: Call ScriptRuntime.createClass ===
                     // Push Context
                     cfw.addALoad(contextLocal);
                     // Push scope
                     cfw.addALoad(variableObjectLocal);
 
                     // Push class name
-                    Node nameChild = child;
                     if (nameChild != null && nameChild.getType() == Token.NAME) {
                         cfw.addPush(nameChild.getString());
-                        child = child.getNext();
                     } else {
                         cfw.addPush(""); // anonymous class
-                        if (nameChild != null && nameChild.getType() == Token.NULL) {
-                            child = nameChild.getNext();
-                        }
                     }
 
                     // Push super class
-                    Node superChild = child;
-                    if (superChild != null) {
-                        if (superChild.getType() == Token.NULL) {
-                            cfw.add(ByteCode.ACONST_NULL);
-                            child = superChild.getNext();
-                        } else {
-                            generateExpression(superChild, node);
-                            child = superChild.getNext();
-                        }
+                    if (superChild != null && superChild.getType() != Token.NULL) {
+                        generateExpression(superChild, node);
                     } else {
                         cfw.add(ByteCode.ACONST_NULL);
                     }
 
                     // Push constructor
-                    Node ctorChild = child;
                     if (ctorChild != null && ctorChild.getType() == Token.FUNCTION) {
                         int fnIndex = ctorChild.getExistingIntProp(Node.FUNCTION_PROP);
                         OptFunctionNode ofn = OptFunctionNode.get(scriptOrFn, fnIndex);
                         int fnType = ofn.fnode.getFunctionType();
                         visitFunction(ofn, fnType);
-                        child = ctorChild.getNext();
                     } else {
                         cfw.add(ByteCode.ACONST_NULL);
                     }
 
                     // Push protoMethods (OBJECTLIT)
-                    Node protoMethodsChild = child;
                     if (protoMethodsChild != null) {
                         generateExpression(protoMethodsChild, node);
-                        child = protoMethodsChild.getNext();
                     } else {
                         cfw.add(ByteCode.ACONST_NULL);
                     }
 
                     // Push staticMethods (OBJECTLIT)
-                    Node staticMethodsChild = child;
                     if (staticMethodsChild != null) {
                         generateExpression(staticMethodsChild, node);
-                        child = staticMethodsChild.getNext();
                     } else {
                         cfw.add(ByteCode.ACONST_NULL);
                     }
 
                     // Push instanceFieldInitFn (FUNCTION or NULL)
-                    Node fieldInitChild = child;
-                    if (fieldInitChild != null) {
-                        if (fieldInitChild.getType() == Token.FUNCTION) {
-                            int fnIndex = fieldInitChild.getExistingIntProp(Node.FUNCTION_PROP);
-                            OptFunctionNode ofn = OptFunctionNode.get(scriptOrFn, fnIndex);
-                            visitFunction(ofn, FunctionNode.FUNCTION_EXPRESSION);
-                            child = fieldInitChild.getNext();
-                        } else if (fieldInitChild.getType() == Token.NULL) {
-                            cfw.add(ByteCode.ACONST_NULL);
-                            child = fieldInitChild.getNext();
-                        } else {
-                            cfw.add(ByteCode.ACONST_NULL);
-                            child = fieldInitChild.getNext();
-                        }
+                    if (instanceFieldInitFnChild != null
+                            && instanceFieldInitFnChild.getType() == Token.FUNCTION) {
+                        int fnIndex =
+                                instanceFieldInitFnChild.getExistingIntProp(Node.FUNCTION_PROP);
+                        OptFunctionNode ofn = OptFunctionNode.get(scriptOrFn, fnIndex);
+                        visitFunction(ofn, FunctionNode.FUNCTION_EXPRESSION);
                     } else {
                         cfw.add(ByteCode.ACONST_NULL);
                     }
 
                     // Push staticInitFn (FUNCTION or NULL)
-                    Node staticInitChild = child;
-                    if (staticInitChild != null) {
-                        if (staticInitChild.getType() == Token.FUNCTION) {
-                            int fnIndex = staticInitChild.getExistingIntProp(Node.FUNCTION_PROP);
-                            OptFunctionNode ofn = OptFunctionNode.get(scriptOrFn, fnIndex);
-                            visitFunction(ofn, FunctionNode.FUNCTION_EXPRESSION);
-                        } else if (staticInitChild.getType() == Token.NULL) {
-                            cfw.add(ByteCode.ACONST_NULL);
-                        } else {
-                            cfw.add(ByteCode.ACONST_NULL);
-                        }
+                    if (staticInitFnChild != null
+                            && staticInitFnChild.getType() == Token.FUNCTION) {
+                        int fnIndex = staticInitFnChild.getExistingIntProp(Node.FUNCTION_PROP);
+                        OptFunctionNode ofn = OptFunctionNode.get(scriptOrFn, fnIndex);
+                        visitFunction(ofn, FunctionNode.FUNCTION_EXPRESSION);
                     } else {
                         cfw.add(ByteCode.ACONST_NULL);
                     }
@@ -1921,6 +1964,85 @@ class BodyCodegen {
                                     + "Lorg/mozilla/javascript/Function;"
                                     + "Lorg/mozilla/javascript/Function;"
                                     + ")Lorg/mozilla/javascript/NativeClass;");
+
+                    // Store class object to local variable
+                    cfw.addAStore(classObjLocal);
+
+                    // === Step 2: Call ScriptRuntime.initPrivateMembers ===
+                    // Reload class object
+                    cfw.addALoad(classObjLocal);
+
+                    // Push privateMethods (OBJECTLIT)
+                    if (privateMethodsChild != null) {
+                        generateExpression(privateMethodsChild, node);
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push privateStaticMethods (OBJECTLIT)
+                    if (privateStaticMethodsChild != null) {
+                        generateExpression(privateStaticMethodsChild, node);
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push privateGetters (OBJECTLIT)
+                    if (privateGettersChild != null) {
+                        generateExpression(privateGettersChild, node);
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push privateSetters (OBJECTLIT)
+                    if (privateSettersChild != null) {
+                        generateExpression(privateSettersChild, node);
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push privateStaticGetters (OBJECTLIT)
+                    if (privateStaticGettersChild != null) {
+                        generateExpression(privateStaticGettersChild, node);
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push privateStaticSetters (OBJECTLIT)
+                    if (privateStaticSettersChild != null) {
+                        generateExpression(privateStaticSettersChild, node);
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push Context
+                    cfw.addALoad(contextLocal);
+
+                    // Call ScriptRuntime.initPrivateMembers
+                    addScriptRuntimeInvoke(
+                            "initPrivateMembers",
+                            "(Lorg/mozilla/javascript/NativeClass;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Lorg/mozilla/javascript/Context;"
+                                    + ")V");
+
+                    // === Step 3: Push the class object as the result ===
+                    cfw.addALoad(classObjLocal);
+                }
+                break;
+
+            case Token.GET:
+            case Token.SET:
+            case Token.METHOD:
+                // GET/SET/METHOD are unary nodes wrapping function expressions for
+                // getter/setter/method definitions in object literals and class definitions.
+                // Generate the wrapped function expression.
+                if (child != null) {
+                    generateExpression(child, node);
                 }
                 break;
 

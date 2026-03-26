@@ -863,9 +863,8 @@ public class Codegen implements Evaluator {
 
     /**
      * List of illegal characters in unqualified names as specified in
-     * https://docs.oracle.com/javase/specs/jvms/se25/html/jvms-4.html#jvms-4.2.2
-     * Also includes space, minus, plus, and other characters that would make
-     * invalid Java identifiers.
+     * https://docs.oracle.com/javase/specs/jvms/se25/html/jvms-4.html#jvms-4.2.2 Also includes
+     * space, minus, plus, and other characters that would make invalid Java identifiers.
      */
     private static Pattern illegalChars = Pattern.compile("[.;\\[/<>\\s\\-+]");
 

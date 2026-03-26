@@ -689,7 +689,9 @@ class TokenStream implements Parser.CurrentPositionReporter {
             tokenBeg = cursor - 1;
             tokenEnd = cursor;
 
-            if (c == '@') return Token.XMLATTR;
+            // ES2023 Decorator: @ decorator prefix
+            // Also used for XML attribute access when XML is enabled
+            if (c == '@') return Token.DECORATOR;
 
             // ES2022 private field identifier: #name
             if (c == '#') {

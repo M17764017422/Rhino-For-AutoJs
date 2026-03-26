@@ -31,6 +31,7 @@ import org.mozilla.javascript.ast.Comment;
 import org.mozilla.javascript.ast.ComputedPropertyKey;
 import org.mozilla.javascript.ast.ConditionalExpression;
 import org.mozilla.javascript.ast.ContinueStatement;
+import org.mozilla.javascript.ast.DecoratorNode;
 import org.mozilla.javascript.ast.DestructuringForm;
 import org.mozilla.javascript.ast.DoLoop;
 import org.mozilla.javascript.ast.ElementGet;
@@ -1473,6 +1474,22 @@ public class Parser {
             case Token.FUNCTION:
                 consumeToken();
                 return function(FunctionNode.FUNCTION_EXPRESSION_STATEMENT);
+
+            case Token.DECORATOR:
+                // ES2023: Decorator on class declaration
+                // Parse decorators first, then check for class keyword
+                {
+                    List<DecoratorNode> decorators = parseDecoratorList();
+                    if (peekToken() == Token.CLASS) {
+                        consumeToken();
+                        ClassNode classNode = classDeclaration();
+                        applyClassDecorators(classNode, decorators);
+                        return classNode;
+                    }
+                    // Decorator not followed by class - error
+                    reportError("msg.decorator.invalid.position");
+                    return new EmptyStatement();
+                }
 
             case Token.CLASS:
                 consumeToken();
@@ -3272,7 +3289,8 @@ public class Parser {
                     return makeErrorNode();
                 }
 
-            case Token.XMLATTR:
+            case Token.DECORATOR:
+                // ES2023: In property access context, treat as XML attribute if XML is available
                 if (compilerEnv.isXmlAvailable()) {
                     // handles: '@attr', '@ns::attr', '@ns::*', '@ns::*',
                     //          '@::attr', '@::*', '@*', '@*::attr', '@*::*'
@@ -3554,10 +3572,23 @@ public class Parser {
                 consumeToken();
                 return parenExpr();
 
-            case Token.XMLATTR:
-                consumeToken();
-                mustHaveXML();
-                return attributeAccess();
+            case Token.DECORATOR:
+                // ES2023: Decorator on class expression
+                {
+                    List<DecoratorNode> decorators = parseDecoratorList();
+                    if (peekToken() == Token.CLASS) {
+                        consumeToken();
+                        ClassNode classNode = classExpression();
+                        applyClassDecorators(classNode, decorators);
+                        return classNode;
+                    }
+                    // Decorator not followed by class - could be XML attribute in XML context
+                    if (compilerEnv.isXmlAvailable()) {
+                        return attributeAccess();
+                    }
+                    reportError("msg.decorator.invalid.position");
+                    return makeErrorNode();
+                }
 
             case Token.NAME:
                 consumeToken();
@@ -4367,6 +4398,10 @@ public class Parser {
         }
         Name name = new Name(beg, s);
         name.setLineColumnNumber(lineno, column);
+        // Fix: Set token type for private fields and other special tokens
+        if (token != Token.NAME) {
+            name.setType(token);
+        }
         if (checkActivation) {
             checkActivationName(s, token);
         }
@@ -5681,9 +5716,15 @@ public class Parser {
         currentClass = savedCurrentClass;
     }
 
-    /** Parse a class element: method, field, or static block. */
+    /** Parse a class element: [Decorators] method, field, or static block. */
     private ClassElement parseClassElement(ClassNode classNode) throws IOException {
-        int pos = ts.tokenBeg;
+        // ES2023: Parse decorators before element
+        List<DecoratorNode> decorators = parseDecoratorList();
+
+        int pos =
+                decorators != null && !decorators.isEmpty()
+                        ? decorators.get(0).getPosition()
+                        : ts.tokenBeg;
         int lineno = lineNumber();
         int column = columnNumber();
 
@@ -5692,6 +5733,7 @@ public class Parser {
         boolean isGenerator = false;
         boolean isGetter = false;
         boolean isSetter = false;
+        boolean isAutoAccessor = false;
         AstNode key = null;
 
         // First pass: check for modifiers (static, async, get, set)
@@ -5706,8 +5748,10 @@ public class Parser {
                     consumeToken();
                     // Check for static block immediately
                     if (peekToken() == Token.LC) {
-                        consumeToken();
-                        return parseStaticBlock(pos, lineno, column);
+                        ClassElement element = parseStaticBlock(pos, lineno, column);
+                        // ES2023: Apply decorators to static block (if any)
+                        applyElementDecorators(element, decorators);
+                        return element;
                     }
                     isStatic = true;
                     continue;
@@ -5753,6 +5797,27 @@ public class Parser {
                     // 'set' is the property name
                     key = createNameNode(true, Token.NAME);
                     break;
+                } else if ("accessor".equals(name)
+                        && !isAutoAccessor
+                        && !isGetter
+                        && !isSetter
+                        && !isAsync
+                        && !isGenerator) {
+                    // ES2023 auto-accessor: accessor x = value;
+                    consumeToken();
+                    int next = peekToken();
+                    // Check if followed by a valid property name
+                    if (next == Token.NAME
+                            || next == Token.STRING
+                            || next == Token.NUMBER
+                            || next == Token.LB
+                            || next == Token.PRIVATE_FIELD) {
+                        isAutoAccessor = true;
+                        continue;
+                    }
+                    // 'accessor' is the property name (not in accessor context)
+                    key = createNameNode(true, Token.NAME);
+                    break;
                 }
             } else if (tt == Token.MUL && !isGenerator) {
                 consumeToken();
@@ -5778,13 +5843,21 @@ public class Parser {
         }
 
         // Determine element type
-        if (isGetter || isSetter) {
-            return parseClassAccessor(pos, lineno, column, isStatic, isGetter, key);
+        ClassElement element;
+        if (isAutoAccessor) {
+            element = parseClassAutoAccessor(pos, lineno, column, isStatic, key);
+        } else if (isGetter || isSetter) {
+            element = parseClassAccessor(pos, lineno, column, isStatic, isGetter, key);
         } else if (peekToken() == Token.LP) {
-            return parseClassMethod(pos, lineno, column, isStatic, isAsync, isGenerator, key);
+            element = parseClassMethod(pos, lineno, column, isStatic, isAsync, isGenerator, key);
         } else {
-            return parseClassField(pos, lineno, column, isStatic, isGenerator, key);
+            element = parseClassField(pos, lineno, column, isStatic, isGenerator, key);
         }
+
+        // ES2023: Apply decorators to element
+        applyElementDecorators(element, decorators);
+
+        return element;
     }
 
     /** Parse static initialization block: static { ... } */
@@ -5987,6 +6060,37 @@ public class Parser {
         return element;
     }
 
+    /** Parse ES2023 auto-accessor: accessor x = value; */
+    private ClassElement parseClassAutoAccessor(
+            int pos, int lineno, int column, boolean isStatic, AstNode key) throws IOException {
+        ClassElement element = new ClassElement(pos);
+        element.setElementType(ClassElement.AUTO_ACCESSOR);
+        element.setStatic(isStatic);
+        element.setComputed(key instanceof ComputedPropertyKey);
+        element.setPrivate(key.getType() == Token.PRIVATE_FIELD);
+        element.setKey(key);
+        key.setParent(element);
+        element.setLineColumnNumber(lineno, column);
+
+        // Parse optional initializer
+        if (matchToken(Token.ASSIGN, true)) {
+            AstNode value = assignExpr();
+            element.setFieldValue(value);
+        }
+
+        // Consume semicolon (allow ASI)
+        if (!matchToken(Token.SEMI, true)) {
+            int next = peekToken();
+            if (next != Token.RC && next != Token.EOF && (peekFlaggedToken() & TI_AFTER_EOL) == 0) {
+                reportError("msg.no.semi.stmt");
+            }
+        }
+
+        element.setLength(ts.tokenEnd - pos);
+
+        return element;
+    }
+
     /** Parse class field or method (determine based on next token). */
     private ClassElement parseClassFieldOrMethod(
             int pos,
@@ -6015,6 +6119,122 @@ public class Parser {
         }
         return null;
     }
+
+    // ==================== ES2023 Decorators Support ====================
+
+    /**
+     * Parse a list of decorators: @decorator @decorator2 ...
+     *
+     * <p>Decorators are parsed before the decorated element (class or class element).
+     *
+     * @return list of DecoratorNode, or null if no decorators
+     */
+    private List<DecoratorNode> parseDecoratorList() throws IOException {
+        List<DecoratorNode> decorators = null;
+
+        while (peekToken() == Token.DECORATOR) {
+            consumeToken();
+            DecoratorNode decorator = parseDecoratorExpression();
+            if (decorator != null) {
+                if (decorators == null) {
+                    decorators = new ArrayList<>();
+                }
+                decorators.add(decorator);
+            }
+        }
+
+        return decorators;
+    }
+
+    /**
+     * Parse a single decorator expression.
+     *
+     * <p>Supports:
+     *
+     * <pre>
+     * @decorator           // identifier
+     * @decorator(arg)      // with arguments
+     * @ns.decorator        // property chain
+     * @ns.decorator(arg)   // property chain with arguments
+     * </pre>
+     */
+    private DecoratorNode parseDecoratorExpression() throws IOException {
+        int pos = ts.tokenBeg;
+        int lineno = lineNumber();
+        int column = columnNumber();
+
+        DecoratorNode decorator = new DecoratorNode(pos);
+        decorator.setLineColumnNumber(lineno, column);
+
+        // Parse the decorator expression - start with identifier
+        AstNode expr = memberExpr(false);
+
+        if (expr == null) {
+            reportError("msg.decorator.name.required");
+            return decorator;
+        }
+
+        // Check if it's a call expression (decorator factory)
+        // The memberExpr may already include the call if it was parsed
+        // But typically decorators are parsed as:
+        // @identifier - just the name
+        // @identifier() - call after
+        // @ns.identifier - property get
+        // @ns.identifier() - property get + call
+
+        // memberExpr handles function calls, so check if expr is already a FunctionCall
+        // If not and we have LP next, then it's a decorator factory
+        if (expr.getType() != Token.CALL && peekToken() == Token.LP) {
+            consumeToken();
+            FunctionCall call = new FunctionCall(pos);
+            call.setTarget(expr);
+            // argumentList() already consumes the closing RP, no need for mustMatchToken here
+            call.setArguments(argumentList());
+            call.setLength(ts.tokenEnd - pos);
+            expr = call;
+        }
+
+        decorator.setExpression(expr);
+        decorator.setLength(ts.tokenEnd - pos);
+
+        return decorator;
+    }
+
+    /**
+     * Apply decorators to a class node.
+     *
+     * @param classNode the class node to decorate
+     * @param decorators the list of decorators to apply
+     */
+    private void applyClassDecorators(ClassNode classNode, List<DecoratorNode> decorators) {
+        if (decorators != null && !decorators.isEmpty()) {
+            classNode.setDecorators(decorators);
+            // Update the position to include decorators
+            int firstPos = decorators.get(0).getPosition();
+            if (firstPos < classNode.getPosition()) {
+                classNode.setPosition(firstPos);
+            }
+        }
+    }
+
+    /**
+     * Apply decorators to a class element.
+     *
+     * @param element the class element to decorate
+     * @param decorators the list of decorators to apply
+     */
+    private void applyElementDecorators(ClassElement element, List<DecoratorNode> decorators) {
+        if (decorators != null && !decorators.isEmpty()) {
+            element.setDecorators(decorators);
+            // Update the position to include decorators
+            int firstPos = decorators.get(0).getPosition();
+            if (firstPos < element.getPosition()) {
+                element.setPosition(firstPos);
+            }
+        }
+    }
+
+    // ==================== End ES2023 Decorators Support ====================
 
     // ==================== End ES2022 Class Parsing Support ====================
 

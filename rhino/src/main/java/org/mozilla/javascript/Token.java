@@ -261,7 +261,13 @@ public class Token {
             EXTENDS = CLASS + 1, // extends keyword
             CLASS_ELEMENT = EXTENDS + 1, // class element AST node type
             PRIVATE_FIELD = CLASS_ELEMENT + 1, // private field # prefix
-            LAST_TOKEN = PRIVATE_FIELD + 1;
+
+            // ===== ES2023 Decorators =====
+            DECORATOR = PRIVATE_FIELD + 1, // @decorator prefix
+
+            // ===== ES2023 Auto-Accessors =====
+            ACCESSOR = DECORATOR + 1, // accessor keyword for auto-accessor
+            LAST_TOKEN = ACCESSOR + 1;
 
     /**
      * Returns a name for the token. If Rhino is compiled with certain hardcoded debugging flags in
@@ -682,6 +688,10 @@ public class Token {
                 return "SET_PRIVATE_FIELD";
             case SET_PRIVATE_FIELD_OP:
                 return "SET_PRIVATE_FIELD_OP";
+            case DECORATOR:
+                return "DECORATOR";
+            case ACCESSOR:
+                return "ACCESSOR";
         }
 
         // Token without name

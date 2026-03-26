@@ -27,6 +27,7 @@ import org.mozilla.javascript.ast.ClassNode;
 import org.mozilla.javascript.ast.ComputedPropertyKey;
 import org.mozilla.javascript.ast.ConditionalExpression;
 import org.mozilla.javascript.ast.ContinueStatement;
+import org.mozilla.javascript.ast.DecoratorNode;
 import org.mozilla.javascript.ast.DestructuringForm;
 import org.mozilla.javascript.ast.DoLoop;
 import org.mozilla.javascript.ast.ElementGet;
@@ -799,6 +800,22 @@ public final class IRFactory {
             // Collect static initialization nodes in definition order
             List<Node> staticInitNodes = new ArrayList<>();
 
+            // Private members - collected separately for NativeClass registration
+            List<Object> privateMethodKeys = new ArrayList<>();
+            List<Node> privateMethodValues = new ArrayList<>();
+            List<Object> privateFieldKeys = new ArrayList<>();
+            List<Node> privateFieldValues = new ArrayList<>();
+            List<Object> privateGetterKeys = new ArrayList<>();
+            List<Node> privateGetterValues = new ArrayList<>();
+            List<Object> privateSetterKeys = new ArrayList<>();
+            List<Node> privateSetterValues = new ArrayList<>();
+            List<Object> privateStaticMethodKeys = new ArrayList<>();
+            List<Node> privateStaticMethodValues = new ArrayList<>();
+            List<Object> privateStaticGetterKeys = new ArrayList<>();
+            List<Node> privateStaticGetterValues = new ArrayList<>();
+            List<Object> privateStaticSetterKeys = new ArrayList<>();
+            List<Node> privateStaticSetterValues = new ArrayList<>();
+
             FunctionNode constructor = null;
 
             for (ClassElement element : classNode.getElements()) {
@@ -806,15 +823,54 @@ public final class IRFactory {
                     constructor = element.getMethod();
                 } else if (element.isMethod()) {
                     Node methodNode = transformFunction(element.getMethod());
+                    Node keyNode = createPropertyKeyNode(element);
+                    String keyString = null;
+                    if (keyNode.getType() == Token.STRING) {
+                        keyString = keyNode.getString();
+                    } else if (keyNode.getType() == Token.NUMBER) {
+                        keyString = ScriptRuntime.numberToString(keyNode.getDouble(), 10);
+                    }
 
+                    // Check if this is a private method/getter/setter
+                    if (element.isPrivate()) {
+                        // Private methods need special handling
+                        if (element.isGetter()) {
+                            if (element.isStatic()) {
+                                privateStaticGetterKeys.add(
+                                        keyString != null ? keyString : keyNode);
+                                privateStaticGetterValues.add(methodNode);
+                            } else {
+                                privateGetterKeys.add(keyString != null ? keyString : keyNode);
+                                privateGetterValues.add(methodNode);
+                            }
+                        } else if (element.isSetter()) {
+                            if (element.isStatic()) {
+                                privateStaticSetterKeys.add(
+                                        keyString != null ? keyString : keyNode);
+                                privateStaticSetterValues.add(methodNode);
+                            } else {
+                                privateSetterKeys.add(keyString != null ? keyString : keyNode);
+                                privateSetterValues.add(methodNode);
+                            }
+                        } else {
+                            // Regular private method
+                            if (element.isStatic()) {
+                                privateStaticMethodKeys.add(
+                                        keyString != null ? keyString : keyNode);
+                                privateStaticMethodValues.add(methodNode);
+                            } else {
+                                privateMethodKeys.add(keyString != null ? keyString : keyNode);
+                                privateMethodValues.add(methodNode);
+                            }
+                        }
+                        continue; // Skip adding to public protoMethods/staticMethods
+                    }
+
+                    // Public methods
                     if (element.isStatic()) {
                         // Static method
-                        Node keyNode = createPropertyKeyNode(element);
-                        if (keyNode.getType() == Token.STRING) {
-                            staticKeys.add(keyNode.getString());
-                        } else if (keyNode.getType() == Token.NUMBER) {
-                            // Convert number to string for property key (ES spec behavior)
-                            staticKeys.add(ScriptRuntime.numberToString(keyNode.getDouble(), 10));
+                        if (keyString != null) {
+                            staticKeys.add(keyString);
                         } else {
                             staticKeys.add(keyNode);
                         }
@@ -828,12 +884,8 @@ public final class IRFactory {
                         }
                     } else {
                         // Instance method
-                        Node keyNode = createPropertyKeyNode(element);
-                        if (keyNode.getType() == Token.STRING) {
-                            protoKeys.add(keyNode.getString());
-                        } else if (keyNode.getType() == Token.NUMBER) {
-                            // Convert number to string for property key (ES spec behavior)
-                            protoKeys.add(ScriptRuntime.numberToString(keyNode.getDouble(), 10));
+                        if (keyString != null) {
+                            protoKeys.add(keyString);
                         } else {
                             protoKeys.add(keyNode);
                         }
@@ -846,14 +898,48 @@ public final class IRFactory {
                             protoValues.add(createUnary(Token.METHOD, methodNode));
                         }
                     }
+                } else if (element.isAutoAccessor()) {
+                    // ES2023 auto-accessor: generates getter and setter with private backing field
+                    transformAutoAccessor(
+                            element,
+                            protoKeys,
+                            protoValues,
+                            staticKeys,
+                            staticValues,
+                            privateFieldKeys,
+                            privateFieldValues,
+                            instanceFields);
                 } else if (element.isField()) {
                     AstNode fieldValue = element.getFieldValue();
                     Node valueNode =
                             fieldValue != null ? transform(fieldValue) : new Node(Token.UNDEFINED);
 
+                    Node keyNode = createPropertyKeyNode(element);
+                    String keyString = null;
+                    if (keyNode.getType() == Token.STRING) {
+                        keyString = keyNode.getString();
+                    } else if (keyNode.getType() == Token.NUMBER) {
+                        keyString = ScriptRuntime.numberToString(keyNode.getDouble(), 10);
+                    }
+
+                    // Check if this is a private field
+                    if (element.isPrivate()) {
+                        // Private fields need special handling - stored in
+                        // NativeClass.privateFieldStorage
+                        if (element.isStatic()) {
+                            // Static private field - needs to be initialized via NativeClass
+                            privateFieldKeys.add(keyString != null ? keyString : keyNode);
+                            privateFieldValues.add(valueNode);
+                        } else {
+                            // Instance private field
+                            privateFieldKeys.add(keyString != null ? keyString : keyNode);
+                            privateFieldValues.add(valueNode);
+                        }
+                        continue; // Skip adding to public instanceFields
+                    }
+
                     if (element.isStatic()) {
                         // Static field - add to static init in definition order
-                        Node keyNode = createPropertyKeyNode(element);
                         Node fieldInit =
                                 new Node(
                                         Token.EXPR_VOID,
@@ -867,7 +953,6 @@ public final class IRFactory {
                         staticInitNodes.add(fieldInit);
                     } else {
                         // Instance field - will be injected into constructor
-                        Node keyNode = createPropertyKeyNode(element);
                         Node fieldInit =
                                 new Node(
                                         Token.EXPR_VOID,
@@ -920,6 +1005,37 @@ public final class IRFactory {
                 }
             }
 
+            // Build private members OBJECTLIT nodes
+            // Private instance methods
+            Node privateMethods =
+                    buildPrivateMembersObjectLit(privateMethodKeys, privateMethodValues);
+
+            // Private static methods
+            Node privateStaticMethods =
+                    buildPrivateMembersObjectLit(
+                            privateStaticMethodKeys, privateStaticMethodValues);
+
+            // Private instance getters
+            Node privateGetters =
+                    buildPrivateMembersObjectLit(privateGetterKeys, privateGetterValues);
+
+            // Private instance setters
+            Node privateSetters =
+                    buildPrivateMembersObjectLit(privateSetterKeys, privateSetterValues);
+
+            // Private static getters
+            Node privateStaticGetters =
+                    buildPrivateMembersObjectLit(
+                            privateStaticGetterKeys, privateStaticGetterValues);
+
+            // Private static setters
+            Node privateStaticSetters =
+                    buildPrivateMembersObjectLit(
+                            privateStaticSetterKeys, privateStaticSetterValues);
+
+            // Private fields (combined for instance and static - will be differentiated at runtime)
+            Node privateFields = buildPrivateMembersObjectLit(privateFieldKeys, privateFieldValues);
+
             // Handle constructor
             Node ctorNode;
             if (constructor != null) {
@@ -933,6 +1049,15 @@ public final class IRFactory {
             classIRNode.addChildToBack(protoMethods);
             classIRNode.addChildToBack(staticMethods);
 
+            // Add private members to classIRNode
+            classIRNode.addChildToBack(privateMethods);
+            classIRNode.addChildToBack(privateStaticMethods);
+            classIRNode.addChildToBack(privateGetters);
+            classIRNode.addChildToBack(privateSetters);
+            classIRNode.addChildToBack(privateStaticGetters);
+            classIRNode.addChildToBack(privateStaticSetters);
+            classIRNode.addChildToBack(privateFields);
+
             // Create instance field initializer function
             Node instanceFieldInitFn = createFieldInitializerFunction(instanceFields);
             classIRNode.addChildToBack(instanceFieldInitFn);
@@ -942,19 +1067,63 @@ public final class IRFactory {
             Node staticInitFn = createStaticInitializerFunction(staticInitNodes);
             classIRNode.addChildToBack(staticInitFn);
 
+            // ES2023: Handle class decorators
+            // Decorators are applied left-to-right, each receiving the class and returning a
+            // potentially modified class
+            Node resultNode = classIRNode;
+            if (classNode.hasDecorators()) {
+                resultNode = applyClassDecorators(classIRNode, classNode.getDecorators());
+            }
+
             // For class declaration, create a VAR statement to bind the class name
             if (classNode.isClassStatement() && className != null) {
                 Node varNode = new Node(Token.VAR);
                 Node varChild = Node.newString(Token.NAME, className.getIdentifier());
-                varChild.addChildToBack(classIRNode);
+                varChild.addChildToBack(resultNode);
                 varNode.addChildToBack(varChild);
                 return varNode;
             }
 
-            return classIRNode;
+            return resultNode;
         } finally {
             astNodePos.pop();
         }
+    }
+
+    /**
+     * Apply class decorators to a class IR node.
+     *
+     * <p>ES2023 decorator application: decorators are applied left-to-right, each decorator
+     * receives the class constructor and returns a (potentially modified) class constructor.
+     *
+     * @param classIRNode the class IR node
+     * @param decorators the list of decorators to apply
+     * @return the decorated class node
+     */
+    private Node applyClassDecorators(Node classIRNode, List<DecoratorNode> decorators) {
+        if (decorators == null || decorators.isEmpty()) {
+            return classIRNode;
+        }
+
+        Node result = classIRNode;
+
+        // Apply decorators in order (left-to-right per ES2023)
+        // Each decorator is called with the class constructor and returns a new constructor
+        for (DecoratorNode decorator : decorators) {
+            AstNode expr = decorator.getExpression();
+            if (expr == null) continue;
+
+            Node decoratorNode = transform(expr);
+
+            // Create a CALL node: decorator(class)
+            // The decorator is called with the class constructor as argument
+            Node callNode = new Node(Token.CALL, decoratorNode);
+            callNode.addChildToBack(result);
+
+            result = callNode;
+        }
+
+        return result;
     }
 
     /** Create a default constructor for a class without explicit constructor. */
@@ -981,6 +1150,155 @@ public final class IRFactory {
                 parser.currentScriptOrFn.addFunction(fn),
                 body,
                 FunctionNode.FUNCTION_EXPRESSION);
+    }
+
+    /**
+     * Build an OBJECTLIT node for private members (methods, getters, setters, fields). This is used
+     * to pass private members to NativeClass for registration.
+     */
+    private Node buildPrivateMembersObjectLit(List<Object> keys, List<Node> values) {
+        Node objLit = new Node(Token.OBJECTLIT);
+        if (keys.isEmpty()) {
+            objLit.putProp(Node.OBJECT_IDS_PROP, ScriptRuntime.emptyArgs);
+        } else {
+            Object[] ids = keys.toArray();
+            objLit.putProp(Node.OBJECT_IDS_PROP, ids);
+            for (Node value : values) {
+                objLit.addChildToBack(value);
+            }
+        }
+        return objLit;
+    }
+
+    /**
+     * Transform an ES2023 auto-accessor element.
+     *
+     * <p>An auto-accessor generates: - A private backing field to store the value - A getter method
+     * that returns the backing field - A setter method that updates the backing field
+     *
+     * @param element the auto-accessor ClassElement
+     * @param protoKeys list to add prototype property keys
+     * @param protoValues list to add prototype property values
+     * @param staticKeys list to add static property keys
+     * @param staticValues list to add static property values
+     * @param privateFieldKeys list to add private field keys
+     * @param privateFieldValues list to add private field values
+     * @param instanceFields block to add instance field initializers
+     */
+    private void transformAutoAccessor(
+            ClassElement element,
+            List<Object> protoKeys,
+            List<Node> protoValues,
+            List<Object> staticKeys,
+            List<Node> staticValues,
+            List<Object> privateFieldKeys,
+            List<Node> privateFieldValues,
+            Node instanceFields) {
+
+        AstNode fieldValue = element.getFieldValue();
+        Node valueNode = fieldValue != null ? transform(fieldValue) : new Node(Token.UNDEFINED);
+
+        Node keyNode = createPropertyKeyNode(element);
+        String keyString = null;
+        if (keyNode.getType() == Token.STRING) {
+            keyString = keyNode.getString();
+        } else if (keyNode.getType() == Token.NUMBER) {
+            keyString = ScriptRuntime.numberToString(keyNode.getDouble(), 10);
+        }
+
+        // Generate a private backing field name
+        // For private auto-accessors, use the original key as storage
+        // For public auto-accessors, generate a unique internal name
+        String storageName;
+        if (element.isPrivate()) {
+            storageName = keyString;
+        } else {
+            storageName = "accessor$" + keyString + "$" + element.getPosition();
+        }
+
+        // Register the private storage field
+        privateFieldKeys.add(storageName);
+        privateFieldValues.add(valueNode);
+
+        // Create getter function
+        FunctionNode getterFn = new FunctionNode();
+        getterFn.setSourceName(parser.currentScriptOrFn.getNextTempName());
+        getterFn.setFunctionIsGetterMethod();
+        Node getterBody = createAutoAccessorGetterNode(storageName);
+        Node getterNode =
+                initFunction(
+                        getterFn,
+                        parser.currentScriptOrFn.addFunction(getterFn),
+                        getterBody,
+                        FunctionNode.FUNCTION_EXPRESSION);
+
+        // Create setter function
+        FunctionNode setterFn = new FunctionNode();
+        setterFn.setSourceName(parser.currentScriptOrFn.getNextTempName());
+        setterFn.setFunctionIsSetterMethod();
+        setterFn.addParam(new Name(0, "value"));
+        Node setterBody = createAutoAccessorSetterNode(storageName);
+        Node setterNode =
+                initFunction(
+                        setterFn,
+                        parser.currentScriptOrFn.addFunction(setterFn),
+                        setterBody,
+                        FunctionNode.FUNCTION_EXPRESSION);
+
+        // Add getter and setter to the appropriate list
+        Object keyId = keyString != null ? keyString : keyNode;
+
+        if (element.isStatic()) {
+            // Static auto-accessor
+            staticKeys.add(keyId);
+            staticValues.add(createUnary(Token.GET, getterNode));
+            staticKeys.add(keyId);
+            staticValues.add(createUnary(Token.SET, setterNode));
+        } else {
+            // Instance auto-accessor
+            protoKeys.add(keyId);
+            protoValues.add(createUnary(Token.GET, getterNode));
+            protoKeys.add(keyId);
+            protoValues.add(createUnary(Token.SET, setterNode));
+        }
+    }
+
+    /** Create a getter function node for an auto-accessor. */
+    private Node createAutoAccessorGetterNode(String storageName) {
+        // Function body: return this.#storage;
+        Node body = new Node(Token.BLOCK);
+        Node returnStmt = new Node(Token.RETURN);
+
+        // Access private field: this.#storage
+        Node thisNode = new Node(Token.THIS);
+        Node access = new Node(Token.GET_PRIVATE_FIELD, thisNode, Node.newString(storageName));
+
+        returnStmt.addChildToBack(access);
+        body.addChildToBack(returnStmt);
+
+        return body;
+    }
+
+    /** Create a setter function node for an auto-accessor. */
+    private Node createAutoAccessorSetterNode(String storageName) {
+        // Function body: this.#storage = value;
+        Node body = new Node(Token.BLOCK);
+
+        // SET_PRIVATE_FIELD node structure: (instance, fieldName, value)
+        // The value is the parameter 'value' of the setter
+        Node thisNode = new Node(Token.THIS);
+        Node fieldNameNode = Node.newString(storageName);
+        // Create a name node for the parameter 'value'
+        Node valueNode = Node.newString(Token.NAME, "value");
+
+        // SET_PRIVATE_FIELD takes (instance, fieldName, value) as children
+        Node setPrivateField =
+                new Node(Token.SET_PRIVATE_FIELD, thisNode, fieldNameNode, valueNode);
+
+        Node exprStmt = new Node(Token.EXPR_VOID, setPrivateField);
+        body.addChildToBack(exprStmt);
+
+        return body;
     }
 
     /**

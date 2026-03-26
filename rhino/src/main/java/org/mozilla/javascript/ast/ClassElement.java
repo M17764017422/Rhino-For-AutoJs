@@ -6,6 +6,9 @@
 
 package org.mozilla.javascript.ast;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import org.mozilla.javascript.Node;
 import org.mozilla.javascript.Token;
 
@@ -50,6 +53,13 @@ public class ClassElement extends AstNode {
     /** Element is a static initialization block */
     public static final int STATIC_BLOCK = 3;
 
+    /** Element is an ES2023 auto-accessor */
+    public static final int AUTO_ACCESSOR = 4;
+
+    /** Immutable empty list for elements with no decorators */
+    private static final List<DecoratorNode> NO_DECORATORS =
+            Collections.unmodifiableList(new ArrayList<>());
+
     private int elementType;
     private boolean isStatic;
     private boolean isPrivate; // ES2022 私有字段/方法
@@ -59,6 +69,7 @@ public class ClassElement extends AstNode {
     private FunctionNode method; // for methods (including getter/setter)
     private AstNode fieldValue; // for fields
     private Block staticBlock; // for static blocks
+    private List<DecoratorNode> decorators; // ES2023 decorators
 
     {
         type = Token.CLASS_ELEMENT;
@@ -118,6 +129,11 @@ public class ClassElement extends AstNode {
 
     public boolean isStaticBlock() {
         return elementType == STATIC_BLOCK;
+    }
+
+    /** Returns true if this element is an ES2023 auto-accessor. */
+    public boolean isAutoAccessor() {
+        return elementType == AUTO_ACCESSOR;
     }
 
     /**
@@ -215,6 +231,58 @@ public class ClassElement extends AstNode {
         }
     }
 
+    // ===== ES2023 Decorators =====
+
+    /**
+     * Returns the decorator list. Returns an immutable empty list if there are no decorators.
+     *
+     * @return the decorator list, never null
+     */
+    public List<DecoratorNode> getDecorators() {
+        return decorators != null ? decorators : NO_DECORATORS;
+    }
+
+    /**
+     * Returns true if this element has decorators.
+     *
+     * @return true if there are decorators
+     */
+    public boolean hasDecorators() {
+        return decorators != null && !decorators.isEmpty();
+    }
+
+    /**
+     * Sets the decorator list, and updates the parent of each decorator. Replaces any existing
+     * decorators.
+     *
+     * @param decorators the decorator list. Can be {@code null}.
+     */
+    public void setDecorators(List<DecoratorNode> decorators) {
+        if (decorators == null) {
+            this.decorators = null;
+        } else {
+            if (this.decorators != null) this.decorators.clear();
+            for (DecoratorNode decorator : decorators) {
+                addDecorator(decorator);
+            }
+        }
+    }
+
+    /**
+     * Adds a decorator to the list, and sets its parent to this node.
+     *
+     * @param decorator the decorator to append to the end of the list
+     * @throws IllegalArgumentException if decorator is {@code null}
+     */
+    public void addDecorator(DecoratorNode decorator) {
+        assertNotNull(decorator);
+        if (decorators == null) {
+            decorators = new ArrayList<>();
+        }
+        decorators.add(decorator);
+        decorator.setParent(this);
+    }
+
     // ===== hasSideEffects =====
 
     /**
@@ -231,6 +299,14 @@ public class ClassElement extends AstNode {
     @Override
     public String toSource(int depth) {
         StringBuilder sb = new StringBuilder();
+
+        // ES2023: Output decorators first (each on its own line)
+        for (DecoratorNode decorator : getDecorators()) {
+            sb.append(makeIndent(depth));
+            sb.append(decorator.toSource(0));
+            sb.append("\n");
+        }
+
         sb.append(makeIndent(depth));
 
         // Static keyword (except for static blocks which have their own formatting)
@@ -247,6 +323,9 @@ public class ClassElement extends AstNode {
                 break;
             case STATIC_BLOCK:
                 appendStaticBlockSource(sb);
+                break;
+            case AUTO_ACCESSOR:
+                appendAutoAccessorSource(sb);
                 break;
         }
         return sb.toString();
@@ -322,13 +401,39 @@ public class ClassElement extends AstNode {
         }
     }
 
+    private void appendAutoAccessorSource(StringBuilder sb) {
+        if (isStatic) {
+            sb.append("static ");
+        }
+        sb.append("accessor ");
+        if (isPrivate) {
+            sb.append("#");
+        }
+        if (isComputed && key != null) {
+            sb.append("[");
+            sb.append(key.toSource(0));
+            sb.append("]");
+        } else if (key != null) {
+            sb.append(key.toSource(0));
+        }
+        if (fieldValue != null) {
+            sb.append(" = ");
+            sb.append(fieldValue.toSource(0));
+        }
+        sb.append(";");
+    }
+
     /**
-     * Visits this node, the key, and the method/fieldValue/staticBlock depending on the element
-     * type.
+     * Visits this node, the decorators (if present), the key, and the method/fieldValue/staticBlock
+     * depending on the element type.
      */
     @Override
     public void visit(NodeVisitor v) {
         if (v.visit(this)) {
+            // Visit decorators first
+            for (DecoratorNode decorator : getDecorators()) {
+                decorator.visit(v);
+            }
             if (key != null) {
                 key.visit(v);
             }

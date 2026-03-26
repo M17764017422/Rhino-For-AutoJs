@@ -54,9 +54,14 @@ public class ClassNode extends AstNode {
     private static final List<ClassElement> NO_ELEMENTS =
             Collections.unmodifiableList(new ArrayList<>());
 
+    /** Immutable empty list for classes with no decorators */
+    private static final List<DecoratorNode> NO_DECORATORS =
+            Collections.unmodifiableList(new ArrayList<>());
+
     private Name className;
     private AstNode superClass; // extends clause (optional)
     private List<ClassElement> elements; // methods, fields, static blocks
+    private List<DecoratorNode> decorators; // ES2023 decorators
     private int classType;
     private int extendsPosition = -1;
     private int lcPosition = -1; // left curly position
@@ -161,6 +166,58 @@ public class ClassNode extends AstNode {
         if (element.isConstructor()) {
             constructorElement = element;
         }
+    }
+
+    // ===== ES2023 Decorators =====
+
+    /**
+     * Returns the decorator list. Returns an immutable empty list if there are no decorators.
+     *
+     * @return the decorator list, never null
+     */
+    public List<DecoratorNode> getDecorators() {
+        return decorators != null ? decorators : NO_DECORATORS;
+    }
+
+    /**
+     * Returns true if this class has decorators.
+     *
+     * @return true if there are decorators
+     */
+    public boolean hasDecorators() {
+        return decorators != null && !decorators.isEmpty();
+    }
+
+    /**
+     * Sets the decorator list, and updates the parent of each decorator. Replaces any existing
+     * decorators.
+     *
+     * @param decorators the decorator list. Can be {@code null}.
+     */
+    public void setDecorators(List<DecoratorNode> decorators) {
+        if (decorators == null) {
+            this.decorators = null;
+        } else {
+            if (this.decorators != null) this.decorators.clear();
+            for (DecoratorNode decorator : decorators) {
+                addDecorator(decorator);
+            }
+        }
+    }
+
+    /**
+     * Adds a decorator to the list, and sets its parent to this node.
+     *
+     * @param decorator the decorator to append to the end of the list
+     * @throws IllegalArgumentException if decorator is {@code null}
+     */
+    public void addDecorator(DecoratorNode decorator) {
+        assertNotNull(decorator);
+        if (decorators == null) {
+            decorators = new ArrayList<>();
+        }
+        decorators.add(decorator);
+        decorator.setParent(this);
     }
 
     public int getClassType() {
@@ -357,6 +414,14 @@ public class ClassNode extends AstNode {
     public String toSource(int depth) {
         StringBuilder sb = new StringBuilder();
         sb.append(makeIndent(depth));
+
+        // ES2023: Output decorators first
+        for (DecoratorNode decorator : getDecorators()) {
+            sb.append(decorator.toSource(0));
+            sb.append("\n");
+            sb.append(makeIndent(depth));
+        }
+
         sb.append("class");
         if (className != null) {
             sb.append(" ");
@@ -377,12 +442,16 @@ public class ClassNode extends AstNode {
     }
 
     /**
-     * Visits this node, the class name (if present), the super class (if present), and each class
-     * element in source order.
+     * Visits this node, the decorators (if present), the class name (if present), the super class
+     * (if present), and each class element in source order.
      */
     @Override
     public void visit(NodeVisitor v) {
         if (v.visit(this)) {
+            // Visit decorators first
+            for (DecoratorNode decorator : getDecorators()) {
+                decorator.visit(v);
+            }
             if (className != null) {
                 className.visit(v);
             }

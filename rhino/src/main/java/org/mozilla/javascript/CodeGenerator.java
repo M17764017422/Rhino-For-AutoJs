@@ -655,8 +655,15 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
                     // child[2]: constructor (FUNCTION)
                     // child[3]: protoMethods (OBJECTLIT)
                     // child[4]: staticMethods (OBJECTLIT)
-                    // child[5]: instanceFieldInitFn (FUNCTION)
-                    // child[6]: staticInitFn (FUNCTION)
+                    // child[5]: privateMethods (OBJECTLIT)
+                    // child[6]: privateStaticMethods (OBJECTLIT)
+                    // child[7]: privateGetters (OBJECTLIT)
+                    // child[8]: privateSetters (OBJECTLIT)
+                    // child[9]: privateStaticGetters (OBJECTLIT)
+                    // child[10]: privateStaticSetters (OBJECTLIT)
+                    // child[11]: privateFields (OBJECTLIT)
+                    // child[12]: instanceFieldInitFn (FUNCTION)
+                    // child[13]: staticInitFn (FUNCTION)
 
                     // Visit className
                     visitExpression(child, 0);
@@ -678,6 +685,34 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
                     visitExpression(child, 0);
                     child = child.getNext();
 
+                    // Visit privateMethods
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit privateStaticMethods
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit privateGetters
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit privateSetters
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit privateStaticGetters
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit privateStaticSetters
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
+                    // Visit privateFields
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
                     // Visit instanceFieldInitFn
                     visitExpression(child, 0);
                     child = child.getNext();
@@ -685,12 +720,10 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
                     // Visit staticInitFn
                     visitExpression(child, 0);
 
-                    // Call ScriptRuntime.createClass(cx, scope, className, superClass,
-                    //                                 constructor, protoMethods, staticMethods,
-                    //                                 instanceFieldInitFn, staticInitFn)
+                    // Call ScriptRuntime.createClass + initPrivateMembers
                     addToken(Token.NEW_CLASS);
-                    // Stack: 7 args -> 1 result
-                    stackChange(-6);
+                    // Stack: 14 args -> 1 result
+                    stackChange(-13);
                 }
                 break;
 

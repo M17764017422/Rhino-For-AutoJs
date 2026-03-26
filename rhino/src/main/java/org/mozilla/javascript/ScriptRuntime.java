@@ -6535,6 +6535,103 @@ public class ScriptRuntime {
     }
 
     /**
+     * Initializes private members (methods, getters, setters, fields) on a NativeClass. This is
+     * called after createClass to register private members.
+     *
+     * @param classObj the NativeClass to initialize
+     * @param privateMethods object containing private instance methods (name -> Function)
+     * @param privateStaticMethods object containing private static methods (name -> Function)
+     * @param privateGetters object containing private instance getters (name -> Function)
+     * @param privateSetters object containing private instance setters (name -> Function)
+     * @param privateStaticGetters object containing private static getters (name -> Function)
+     * @param privateStaticSetters object containing private static setters (name -> Function)
+     * @param cx the current context
+     */
+    public static void initPrivateMembers(
+            NativeClass classObj,
+            Scriptable privateMethods,
+            Scriptable privateStaticMethods,
+            Scriptable privateGetters,
+            Scriptable privateSetters,
+            Scriptable privateStaticGetters,
+            Scriptable privateStaticSetters,
+            Context cx) {
+        Object brand = classObj.getClassBrand();
+
+        // Register private instance methods
+        if (privateMethods != null && !privateMethods.equals(Undefined.instance)) {
+            Object[] ids = privateMethods.getIds();
+            for (Object id : ids) {
+                String name = id instanceof String ? (String) id : String.valueOf(id);
+                Object value = privateMethods.get(name, privateMethods);
+                if (value instanceof Function) {
+                    classObj.setPrivateMethod(name, (Function) value, brand);
+                }
+            }
+        }
+
+        // Register private static methods
+        if (privateStaticMethods != null && !privateStaticMethods.equals(Undefined.instance)) {
+            Object[] ids = privateStaticMethods.getIds();
+            for (Object id : ids) {
+                String name = id instanceof String ? (String) id : String.valueOf(id);
+                Object value = privateStaticMethods.get(name, privateStaticMethods);
+                if (value instanceof Function) {
+                    classObj.setPrivateStaticMethod(name, (Function) value, brand);
+                }
+            }
+        }
+
+        // Register private instance getters
+        if (privateGetters != null && !privateGetters.equals(Undefined.instance)) {
+            Object[] ids = privateGetters.getIds();
+            for (Object id : ids) {
+                String name = id instanceof String ? (String) id : String.valueOf(id);
+                Object value = privateGetters.get(name, privateGetters);
+                if (value instanceof Function) {
+                    classObj.setPrivateGetter(name, (Function) value, brand);
+                }
+            }
+        }
+
+        // Register private instance setters
+        if (privateSetters != null && !privateSetters.equals(Undefined.instance)) {
+            Object[] ids = privateSetters.getIds();
+            for (Object id : ids) {
+                String name = id instanceof String ? (String) id : String.valueOf(id);
+                Object value = privateSetters.get(name, privateSetters);
+                if (value instanceof Function) {
+                    classObj.setPrivateSetter(name, (Function) value, brand);
+                }
+            }
+        }
+
+        // Register private static getters
+        if (privateStaticGetters != null && !privateStaticGetters.equals(Undefined.instance)) {
+            Object[] ids = privateStaticGetters.getIds();
+            for (Object id : ids) {
+                String name = id instanceof String ? (String) id : String.valueOf(id);
+                Object value = privateStaticGetters.get(name, privateStaticGetters);
+                if (value instanceof Function) {
+                    classObj.setPrivateStaticGetter(name, (Function) value, brand);
+                }
+            }
+        }
+
+        // Register private static setters
+        if (privateStaticSetters != null && !privateStaticSetters.equals(Undefined.instance)) {
+            Object[] ids = privateStaticSetters.getIds();
+            for (Object id : ids) {
+                String name = id instanceof String ? (String) id : String.valueOf(id);
+                Object value = privateStaticSetters.get(name, privateStaticSetters);
+                if (value instanceof Function) {
+                    classObj.setPrivateStaticSetter(name, (Function) value, brand);
+                }
+            }
+        }
+    }
+
+    /**
      * Gets a private field value from an instance, looking up the class from scope. This is used
      * for compiled code to access private fields.
      *
