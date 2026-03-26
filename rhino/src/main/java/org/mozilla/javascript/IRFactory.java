@@ -186,6 +186,18 @@ public final class IRFactory {
                 return transformElementGet((ElementGet) node);
             case Token.GETPROP:
                 return transformPropertyGet((PropertyGet) node);
+            case Token.DOT:
+            case Token.DOTDOT:
+                // DOT and DOTDOT are used by XmlMemberGet nodes (E4X XML)
+                if (node instanceof XmlMemberGet) {
+                    return transformXmlMemberGet((XmlMemberGet) node);
+                }
+                // Fallback to infix expression handler for other cases
+                if (node instanceof InfixExpression) {
+                    return transformInfix((InfixExpression) node);
+                }
+                throw new IllegalArgumentException(
+                        "Unexpected node type DOT/DOTDOT: " + node.getClass().getSimpleName());
             case Token.QUESTION_DOT:
                 if (node instanceof ElementGet) {
                     return transformElementGet((ElementGet) node);
@@ -1270,8 +1282,14 @@ public final class IRFactory {
         Node returnStmt = new Node(Token.RETURN);
 
         // Access private field: this.#storage
-        Node thisNode = new Node(Token.THIS);
-        Node access = new Node(Token.GET_PRIVATE_FIELD, thisNode, Node.newString(storageName));
+        // Use transform to create THIS node properly (handles scope/context)
+        KeywordLiteral thisLiteral = new KeywordLiteral();
+        thisLiteral.setType(Token.THIS);
+        Node thisNode = transform(thisLiteral);
+
+        // Field name as string - use default Token.STRING type
+        Node fieldNameNode = Node.newString(storageName);
+        Node access = new Node(Token.GET_PRIVATE_FIELD, thisNode, fieldNameNode);
 
         returnStmt.addChildToBack(access);
         body.addChildToBack(returnStmt);
@@ -1286,10 +1304,18 @@ public final class IRFactory {
 
         // SET_PRIVATE_FIELD node structure: (instance, fieldName, value)
         // The value is the parameter 'value' of the setter
-        Node thisNode = new Node(Token.THIS);
+
+        // Use transform to create THIS node properly
+        KeywordLiteral thisLiteral = new KeywordLiteral();
+        thisLiteral.setType(Token.THIS);
+        Node thisNode = transform(thisLiteral);
+
+        // Field name as string
         Node fieldNameNode = Node.newString(storageName);
-        // Create a name node for the parameter 'value'
-        Node valueNode = Node.newString(Token.NAME, "value");
+
+        // Create the value parameter name node through transform
+        Name valueName = new Name(0, "value");
+        Node valueNode = transform(valueName);
 
         // SET_PRIVATE_FIELD takes (instance, fieldName, value) as children
         Node setPrivateField =

@@ -3444,7 +3444,9 @@ public class Parser {
     private AstNode propertyName(int atPos, int memberTypeFlags) throws IOException {
         int pos = atPos != -1 ? atPos : ts.tokenBeg, lineno = lineNumber(), column = columnNumber();
         int colonPos = -1;
-        Name name = createNameNode(true, currentToken);
+        // Always use Token.NAME for property names - currentToken may be stale (e.g., DOT from
+        // property access)
+        Name name = createNameNode(true, Token.NAME);
         Name ns = null;
 
         if (matchToken(Token.COLONCOLON, true)) {
@@ -5867,7 +5869,12 @@ public class Parser {
         element.setStatic(true);
         element.setLineColumnNumber(lineno, column);
 
-        // Parse block body (already consumed '{')
+        // Consume the '{' token (was only peeked, not consumed)
+        if (!mustMatchToken(Token.LC, "msg.no.brace.after.static", true)) {
+            return element;
+        }
+
+        // Parse block body
         Block block = new Block(ts.tokenBeg);
         block.setLineColumnNumber(lineNumber(), columnNumber());
 

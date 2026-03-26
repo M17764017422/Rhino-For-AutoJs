@@ -1,0 +1,109 @@
+﻿Initialized native services in: F:\AIDE\.gradle\native
+Initialized jansi services in: F:\AIDE\.gradle\native
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.4.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Starting process 'Gradle build daemon'. Working directory: F:\AIDE\.gradle\daemon\9.4.0 Command: F:\AIDE\jdk-21.0.9+10\bin\java.exe --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-opens=java.base/java.nio.charset=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.xml/javax.xml.namespace=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED -Xmx4g -Dfile.encoding=UTF-8 -Duser.country=CN -Duser.language=zh -Duser.variant -cp F:\AIDE\.gradle\wrapper\dists\gradle-9.4.0-bin\lcvyxq3t37f6mx9miaydrrgs\gradle-9.4.0\lib\gradle-daemon-main-9.4.0.jar -javaagent:F:\AIDE\.gradle\wrapper\dists\gradle-9.4.0-bin\lcvyxq3t37f6mx9miaydrrgs\gradle-9.4.0\lib\agents\gradle-instrumentation-agent-9.4.0.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 9.4.0
+Successfully started process 'Gradle build daemon'
+An attempt to start the daemon took 7.573 secs.
+The client will now receive all logging from the daemon (pid: 18876). The daemon log file: F:\AIDE\.gradle\daemon\9.4.0\daemon-18876.out.log
+Daemon will be stopped at the end of the build 
+Using 8 worker leases.
+Operational build model parameters: {cachingModelBuilding=false, configurationCache=true, configurationCacheDisabledReason=null, configurationCacheParallelLoad=true, configurationCacheParallelStore=false, configureOnDemand=false, invalidateCoupledProjects=false, isolatedProjects=false, modelAsProjectDependency=false, modelBuilding=false, parallelModelBuilding=false, parallelProjectConfiguration=false, parallelProjectExecution=true, resilientModelBuilding=false}
+Received JVM installation metadata from 'F:\AIDE\jdk-21.0.9+10': {JAVA_HOME=F:\AIDE\jdk-21.0.9+10, JAVA_VERSION=21.0.9, JAVA_VENDOR=Eclipse Adoptium, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=21.0.9+10-LTS, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=21.0.9+10-LTS, VM_VENDOR=Eclipse Adoptium, OS_ARCH=amd64}
+Encryption key source: default Gradle keystore (pkcs12)
+Reusing configuration cache.
+Watching the file system is configured to be enabled if available
+Not watching K:\msys64\home\ms900\Rhino-For-AutoJs since the file system is not supported
+Not watching K:\msys64\home\ms900\Rhino-For-AutoJs\buildSrc since the file system is not supported
+File system watching is active
+Using local directory build cache for the root build (location = F:\AIDE\.gradle\caches\build-cache-1, remove unused entries = after 7 days).
+Tasks to be executed: [task ':rhino:compileJava', task ':rhino:processResources', task ':rhino:classes', task ':rhino:jar', task ':testutils:compileJava', task ':rhino:compileTestJava', task ':rhino:processTestResources', task ':rhino:testClasses', task ':testutils:processResources', task ':testutils:classes', task ':testutils:jar', task ':rhino:test']
+Tasks that were excluded: []
+Resolve mutations for :rhino:compileJava (Thread[#63,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :rhino:processResources (Thread[#67,Execution worker Thread 6,5,main]) started.
+Resolve mutations for :testutils:processResources (Thread[#66,Execution worker Thread 5,5,main]) started.
+Resolve mutations for :rhino:processTestResources (Thread[#64,Execution worker Thread 3,5,main]) started.
+:rhino:processResources (Thread[#67,Execution worker Thread 6,5,main]) started.
+:rhino:processTestResources (Thread[#64,Execution worker Thread 3,5,main]) started.
+:testutils:processResources (Thread[#66,Execution worker Thread 5,5,main]) started.
+:rhino:compileJava (Thread[#63,Execution worker Thread 2,5,main]) started.
+
+> Task :testutils:processResources NO-SOURCE
+Skipping task ':testutils:processResources' as it has no source files and no previous output files.
+Build a482287d-9b57-4822-924e-851d4274e975 is started
+
+> Task :rhino:processTestResources UP-TO-DATE
+Caching disabled for task ':rhino:processTestResources' because:
+  Not worth caching
+Skipping task ':rhino:processTestResources' as it is up-to-date.
+
+> Task :rhino:processResources UP-TO-DATE
+Caching disabled for task ':rhino:processResources' because:
+  Not worth caching
+Skipping task ':rhino:processResources' as it is up-to-date.
+
+> Task :rhino:compileJava UP-TO-DATE
+Build cache key for task ':rhino:compileJava' is 010b3513caa7da7ae10ca4b4473ec65b
+Skipping task ':rhino:compileJava' as it is up-to-date.
+No compile result for :rhino:compileJava
+No compile result for :rhino:compileJava
+Resolve mutations for :rhino:classes (Thread[#63,Execution worker Thread 2,5,main]) started.
+:rhino:classes (Thread[#63,Execution worker Thread 2,5,main]) started.
+
+> Task :rhino:classes UP-TO-DATE
+Skipping task ':rhino:classes' as it has no actions.
+Resolve mutations for :rhino:jar (Thread[#63,Execution worker Thread 2,5,main]) started.
+:rhino:jar (Thread[#63,Execution worker Thread 2,5,main]) started.
+
+> Task :rhino:jar UP-TO-DATE
+Caching disabled for task ':rhino:jar' because:
+  Not worth caching
+Skipping task ':rhino:jar' as it is up-to-date.
+work action resolve rhino-2.0.0-SNAPSHOT.jar (project :rhino) (Thread[#63,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :testutils:compileJava (Thread[#63,Execution worker Thread 2,5,main]) started.
+:testutils:compileJava (Thread[#63,Execution worker Thread 2,5,main]) started.
+
+> Task :testutils:compileJava UP-TO-DATE
+Build cache key for task ':testutils:compileJava' is 6e44a2c8d641b2c809df44cf8af469f1
+Skipping task ':testutils:compileJava' as it is up-to-date.
+No compile result for :testutils:compileJava
+No compile result for :testutils:compileJava
+work action resolve main (project :testutils) (Thread[#63,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :testutils:classes (Thread[#64,Execution worker Thread 3,5,main]) started.
+Resolve mutations for :rhino:compileTestJava (Thread[#63,Execution worker Thread 2,5,main]) started.
+:testutils:classes (Thread[#64,Execution worker Thread 3,5,main]) started.
+
+> Task :testutils:classes UP-TO-DATE
+Skipping task ':testutils:classes' as it has no actions.
+Resolve mutations for :testutils:jar (Thread[#64,Execution worker Thread 3,5,main]) started.
+:testutils:jar (Thread[#64,Execution worker Thread 3,5,main]) started.
+:rhino:compileTestJava (Thread[#62,Execution worker,5,main]) started.
+
+> Task :testutils:jar UP-TO-DATE
+Caching disabled for task ':testutils:jar' because:
+  Not worth caching
+Skipping task ':testutils:jar' as it is up-to-date.
+work action resolve testutils-2.0.0-SNAPSHOT.jar (project :testutils) (Thread[#64,Execution worker Thread 3,5,main]) started.
+
+> Task :rhino:compileTestJava UP-TO-DATE
+Build cache key for task ':rhino:compileTestJava' is f1d9f2d98853177bf91f39796ca26ea7
+Skipping task ':rhino:compileTestJava' as it is up-to-date.
+No compile result for :rhino:compileTestJava
+No compile result for :rhino:compileTestJava
+Resolve mutations for :rhino:testClasses (Thread[#62,Execution worker,5,main]) started.
+:rhino:testClasses (Thread[#62,Execution worker,5,main]) started.
+
+> Task :rhino:testClasses UP-TO-DATE
+Skipping task ':rhino:testClasses' as it has no actions.
+Resolve mutations for :rhino:test (Thread[#62,Execution worker,5,main]) started.
+:rhino:test (Thread[#65,Execution worker Thread 4,5,main]) started.
+
+> Task :rhino:test UP-TO-DATE
+Build cache key for task ':rhino:test' is 6993695da2a99c21a4876b36a6ceb5d3
+Skipping task ':rhino:test' as it is up-to-date.
+Build a482287d-9b57-4822-924e-851d4274e975 is closed
+
+BUILD SUCCESSFUL in 31s
+8 actionable tasks: 8 up-to-date
+Some of the file system contents retained in the virtual file system are on file systems that Gradle doesn't support watching. The relevant state was discarded to ensure changes to these locations are properly detected. You can override this by explicitly enabling file system watching.
+Watched directory hierarchies: []
+Configuration cache entry reused.
