@@ -1,9 +1,9 @@
 # Rhino ES2022/ES2023 Class 特性开发路线图
 
-> **当前状态**: ES2023 Decorators 和 Auto-Accessors 已实现，装饰器工厂已修复
-> **文档版本**: 7.0
+> **当前状态**: ES2023 Decorators 完全实现 ✅ | Auto-Accessors 解析完成 ✅ | 运行时字节码生成待修复
+> **文档版本**: 8.0
 > **创建日期**: 2026-03-26
-> **更新日期**: 2026-03-26
+> **更新日期**: 2026-03-27
 > **参考规范**: [ECMAScript 2023 Specification](https://tc39.es/ecma262/), [TC39 Decorators Proposal](https://tc39.es/proposal-decorators/)
 
 ---
@@ -1179,14 +1179,14 @@ v2.2.0:       正式发布
 - **类装饰器运行时** ✅ **已修复**
 
 **❌ 待修复**:
-- accessor 运行时执行 (IRFactory.transform)
-- 静态块解析边界情况
+- accessor 运行时字节码生成 (BodyCodegen.generatePrologue)
+- 临时解决方案: 使用解释器模式 `cx.setOptimizationLevel(-1)`
 
 ### 11.4 后续修复优先级
 
-1. **中优先级**: 修复 IRFactory.transform() 运行时问题 (accessor 运行时)
-2. **低优先级**: 修复静态块解析边界情况
-3. **低优先级**: Test262 完整兼容测试
+1. **高优先级**: 修复 accessor 运行时字节码生成问题
+2. **中优先级**: Test262 完整兼容测试
+3. **低优先级**: 性能优化
 
 ---
 
@@ -1196,9 +1196,46 @@ v2.2.0:       正式发布
 
 | 优先级 | 问题 | 影响 | 状态 |
 |--------|------|------|------|
-| **中** | accessor 运行时 (IRFactory.transform) | 6个运行时测试失败 | 📋 待修复 |
-| **低** | 静态块解析边界 | 2个测试失败 | 📋 待修复 |
-| **低** | Test262 兼容测试 | 规范兼容性验证 | 📋 计划中 |
+| **高** | accessor 运行时字节码生成 | 5个运行时测试失败 | 🔧 进行中 |
+| **中** | 装饰器运行时 "Can't transform: 127" | 类装饰器运行时失败 | ✅ 已修复 |
+| **低** | 静态块解析边界 | 已修复 | ✅ 已修复 |
+
+### 12.2 已修复问题记录
+
+| 问题 | 修复日期 | 修复内容 |
+|------|----------|----------|
+| "Can't transform: 127" (DOT) | 2026-03-27 | `Parser.propertyName()` 使用 `Token.NAME` 替代错误的 `currentToken` |
+| IRFactory 缺少 DOT/DOTDOT case | 2026-03-27 | 添加 `case Token.DOT:` 和 `case Token.DOTDOT:` 处理 `XmlMemberGet` 节点 |
+| 静态块解析错误 | 2026-03-27 | `parseStaticBlock()` 正确消费 `{` token |
+
+### 12.3 当前测试状态
+
+| 测试套件 | 通过率 | 说明 |
+|----------|--------|------|
+| DecoratorTest | 28/28 ✅ | 100% 通过（含运行时测试）|
+| AutoAccessorTest | 38/38 ✅ | 100% 通过（仅解析测试）|
+| ES2023EdgeCaseTest | 101/106 ✅ | 95% 通过 |
+| ES2023EdgeCaseTest$RuntimeBoundaryConditions | 2/7 | 5个 accessor 运行时测试失败 |
+| **总计** | **167/173** | **96.5%** |
+
+### 12.4 Auto-Accessor 运行时问题详情
+
+**错误**: `java.lang.VerifyError: Bad type on operand stack`
+- 栈上有两个 Object，期望一个
+- 字节码位置: `invokestatic` 调用 `getPrivateFieldInternal`
+- 影响: `testBasicAutoAccessorRuntime` 等 5 个测试
+
+**临时解决方案**:
+```java
+// 使用解释器模式可正常工作
+cx.setOptimizationLevel(-1);
+```
+
+**根因**: `BodyCodegen` 在 `hasVarsInRegs` 模式下处理动态创建的 getter/setter 函数时，局部变量布局不正确。
+
+**修复方向**: 
+1. 检查 `generatePrologue()` 中 getter 函数的参数初始化
+2. 或强制 accessor 函数使用 `requiresActivation` 避免 `hasVarsInRegs` 模式
 
 ### 12.2 可用智能体及分工
 
