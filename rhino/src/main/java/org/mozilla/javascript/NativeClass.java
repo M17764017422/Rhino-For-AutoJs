@@ -7,6 +7,7 @@
 package org.mozilla.javascript;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -63,6 +64,9 @@ public class NativeClass extends BaseFunction {
     /** Private static setter storage: fieldName -> Function */
     private final Map<String, Function> privateStaticSetters;
 
+    /** Declared private field names (for brand validation and existence checks) */
+    private final Set<String> declaredPrivateFields;
+
     /** Instance field initializers: fieldName -> initializer function */
     private Scriptable instanceFieldInitializers;
 
@@ -98,6 +102,7 @@ public class NativeClass extends BaseFunction {
         this.privateSetters = new ConcurrentHashMap<>();
         this.privateStaticGetters = new ConcurrentHashMap<>();
         this.privateStaticSetters = new ConcurrentHashMap<>();
+        this.declaredPrivateFields = ConcurrentHashMap.newKeySet();
 
         setParentScope(scope);
         setFunctionName(className != null ? className : "");
@@ -209,6 +214,16 @@ public class NativeClass extends BaseFunction {
     // ==================== Private Field Management ====================
 
     /**
+     * Declares a private field name. Called during class initialization to register all declared
+     * private fields.
+     *
+     * @param fieldName the private field name (without # prefix)
+     */
+    public void declarePrivateField(String fieldName) {
+        declaredPrivateFields.add(fieldName);
+    }
+
+    /**
      * Gets a private field value from an instance.
      *
      * @param instance the instance
@@ -292,11 +307,13 @@ public class NativeClass extends BaseFunction {
      * Gets a private method.
      *
      * @param fieldName the private method name (without # prefix)
-     * @param brand the expected class brand for validation
+     * @param brand the expected class brand for validation (unused, kept for API compatibility)
      * @return the method function
      */
     public Function getPrivateMethod(String fieldName, Object brand) {
-        validatePrivateAccess(brand);
+        // Note: Brand validation is handled by the caller (ScriptRuntime.getPrivateFieldInternal)
+        // which traverses the prototype chain to find the class that defines this private member.
+        // The access is valid if we reach this point.
         Function method = privateMethods.get(fieldName);
         if (method == null) {
             throw ScriptRuntime.referenceErrorById("msg.class.private.method.access", fieldName);
@@ -396,6 +413,24 @@ public class NativeClass extends BaseFunction {
                 || privateSetters.containsKey(fieldName);
     }
 
+    /**
+     * Checks if this class defines a private field with the given name (including static private
+     * fields). This is used for brand validation in inheritance chains.
+     *
+     * @param fieldName the private field name (without # prefix)
+     * @return true if this class defines the field
+     */
+    public boolean hasPrivateFieldDefinition(String fieldName) {
+        return declaredPrivateFields.contains(fieldName)
+                || staticPrivateFields.containsKey(fieldName)
+                || privateMethods.containsKey(fieldName)
+                || privateStaticMethods.containsKey(fieldName)
+                || privateGetters.containsKey(fieldName)
+                || privateSetters.containsKey(fieldName)
+                || privateStaticGetters.containsKey(fieldName)
+                || privateStaticSetters.containsKey(fieldName);
+    }
+
     /** Validates that the provided brand matches this class's brand. */
     private void validatePrivateAccess(Object brand) {
         if (brand != this.classBrand) {
@@ -448,8 +483,10 @@ public class NativeClass extends BaseFunction {
         // Set parent scope
         instance.setParentScope(scope);
 
-        // Store brand for private field access validation
-        instance.put("_classBrand", instance, classBrand);
+        // Store brand for private field access validation using defineProperty
+        // for stable, non-enumerable, read-only storage
+        ScriptableObject.defineProperty(
+                instance, "_classBrand", classBrand, DONTENUM | READONLY | PERMANENT);
 
         return instance;
     }

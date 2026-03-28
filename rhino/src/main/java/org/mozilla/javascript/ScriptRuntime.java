@@ -6545,6 +6545,8 @@ public class ScriptRuntime {
      * @param privateSetters object containing private instance setters (name -> Function)
      * @param privateStaticGetters object containing private static getters (name -> Function)
      * @param privateStaticSetters object containing private static setters (name -> Function)
+     * @param privateFields object containing private field names (name -> undefined/value)
+     * @param privateStaticFields object containing private static field names (name -> value)
      * @param cx the current context
      */
     public static void initPrivateMembers(
@@ -6555,8 +6557,30 @@ public class ScriptRuntime {
             Scriptable privateSetters,
             Scriptable privateStaticGetters,
             Scriptable privateStaticSetters,
+            Scriptable privateFields,
+            Scriptable privateStaticFields,
             Context cx) {
         Object brand = classObj.getClassBrand();
+
+        // Register private field names first (for hasPrivateFieldDefinition check)
+        if (privateFields != null && !privateFields.equals(Undefined.instance)) {
+            Object[] ids = privateFields.getIds();
+            for (Object id : ids) {
+                String name = id instanceof String ? (String) id : String.valueOf(id);
+                classObj.declarePrivateField(name);
+            }
+        }
+
+        // Register private static field names and values
+        if (privateStaticFields != null && !privateStaticFields.equals(Undefined.instance)) {
+            Object[] ids = privateStaticFields.getIds();
+            for (Object id : ids) {
+                String name = id instanceof String ? (String) id : String.valueOf(id);
+                classObj.declarePrivateField(name);
+                Object value = privateStaticFields.get(name, privateStaticFields);
+                classObj.setStaticPrivateField(name, value, brand);
+            }
+        }
 
         // Register private instance methods
         if (privateMethods != null && !privateMethods.equals(Undefined.instance)) {
@@ -6643,38 +6667,128 @@ public class ScriptRuntime {
      */
     public static Object getPrivateFieldInternal(
             Object instance, String fieldName, Context cx, Scriptable scope) {
-        // Get the class from the instance's constructor
         if (instance instanceof Scriptable) {
-            Object constructor = ((Scriptable) instance).get("constructor", (Scriptable) instance);
-            if (constructor instanceof NativeClass) {
-                NativeClass classObj = (NativeClass) constructor;
-                Object brand = classObj.getClassBrand();
+            Scriptable scriptable = (Scriptable) instance;
 
-                // 1. Check for private field first
-                try {
-                    return classObj.getPrivateField(instance, fieldName, brand);
-                } catch (EcmaError e) {
-                    // Field not found, continue to check other types
-                    if (!e.getMessage().contains("not found")) {
-                        throw e;
+            // Get the instance's brand (stored on the instance during construction)
+            Object instanceBrand = scriptable.get("_classBrand", scriptable);
+
+            // Check if brand is valid (not NOT_FOUND, not Undefined, not null)
+            boolean hasValidInstanceBrand =
+                    instanceBrand != null
+                            && instanceBrand != Scriptable.NOT_FOUND
+                            && !Undefined.isUndefined(instanceBrand);
+
+            // Special case: if instance is a NativeClass itself, this is a static context access
+            // (e.g., this.#field inside a static method)
+            if (instance instanceof NativeClass) {
+                NativeClass classObj = (NativeClass) instance;
+                if (classObj.hasPrivateFieldDefinition(fieldName)) {
+                    Object brand = classObj.getClassBrand();
+
+                    // 1. Check for static private field
+                    try {
+                        return classObj.getStaticPrivateField(fieldName, brand);
+                    } catch (EcmaError e) {
+                        if (!e.getMessage().contains("not found")) {
+                            throw e;
+                        }
+                    }
+
+                    // 2. Check for static private method
+                    try {
+                        Function staticMethod = classObj.getPrivateStaticMethod(fieldName, brand);
+                        if (staticMethod != null) {
+                            return staticMethod;
+                        }
+                    } catch (EcmaError e) {
+                        // Continue
+                    }
+
+                    // 3. Check for static private getter
+                    try {
+                        Function staticGetter = classObj.getPrivateStaticGetter(fieldName, brand);
+                        if (staticGetter != null) {
+                            return staticGetter.call(cx, scope, scriptable, emptyArgs);
+                        }
+                    } catch (EcmaError e) {
+                        // Continue
                     }
                 }
-
-                // 2. Check for private method
-                Function method = classObj.getPrivateMethod(fieldName, brand);
-                if (method != null) {
-                    return method;
-                }
-
-                // 3. Check for private getter
-                Function getter = classObj.getPrivateGetter(fieldName, brand);
-                if (getter != null) {
-                    return getter.call(cx, scope, (Scriptable) instance, emptyArgs);
-                }
-
-                // Not found
-                throw referenceErrorById("msg.class.private.field.not.found", fieldName);
             }
+
+            // Traverse the prototype chain to find the class that defines this private field
+            Scriptable current = scriptable;
+            while (current != null) {
+                Object constructor = current.get("constructor", current);
+                if (constructor instanceof NativeClass) {
+                    NativeClass classObj = (NativeClass) constructor;
+
+                    // Check if this class defines the private field
+                    if (classObj.hasPrivateFieldDefinition(fieldName)) {
+                        // Use the instance's brand if valid, otherwise use the defining class's
+                        // brand.
+                        // This handles cases where _classBrand might not be properly set
+                        // in interpreter mode.
+                        Object brand =
+                                hasValidInstanceBrand ? instanceBrand : classObj.getClassBrand();
+
+                        // 1. Check for private field first
+                        try {
+                            return classObj.getPrivateField(instance, fieldName, brand);
+                        } catch (EcmaError e) {
+                            // Field not found, continue to check other types
+                            if (!e.getMessage().contains("not found")) {
+                                throw e;
+                            }
+                        }
+
+                        // 2. Check for private method (instance or static)
+                        // If instance is the class itself (NativeClass), check static methods first
+                        if (instance == classObj) {
+                            try {
+                                Function staticMethod =
+                                        classObj.getPrivateStaticMethod(fieldName, brand);
+                                if (staticMethod != null) {
+                                    return staticMethod;
+                                }
+                            } catch (EcmaError e) {
+                                // Static method not found, fall through to instance method check
+                            }
+                        }
+
+                        Function method = classObj.getPrivateMethod(fieldName, brand);
+                        if (method != null) {
+                            return method;
+                        }
+
+                        // Also check static methods for class instances (in case of static method
+                        // context)
+                        if (instance != classObj) {
+                            try {
+                                Function staticMethod =
+                                        classObj.getPrivateStaticMethod(fieldName, brand);
+                                if (staticMethod != null) {
+                                    return staticMethod;
+                                }
+                            } catch (EcmaError e) {
+                                // Static method not found, continue
+                            }
+                        }
+
+                        // 3. Check for private getter
+                        Function getter = classObj.getPrivateGetter(fieldName, brand);
+                        if (getter != null) {
+                            return getter.call(cx, scope, scriptable, emptyArgs);
+                        }
+                    }
+                }
+                // Move up the prototype chain
+                current = current.getPrototype();
+            }
+
+            // Not found in any class in the inheritance chain
+            throw referenceErrorById("msg.class.private.field.not.found", fieldName);
         }
         throw constructError(
                 "TypeError",
@@ -6694,23 +6808,46 @@ public class ScriptRuntime {
      */
     public static Object setPrivateFieldInternal(
             Object instance, String fieldName, Object value, Context cx, Scriptable scope) {
-        // Get the class from the instance's constructor
         if (instance instanceof Scriptable) {
-            Object constructor = ((Scriptable) instance).get("constructor", (Scriptable) instance);
-            if (constructor instanceof NativeClass) {
-                NativeClass classObj = (NativeClass) constructor;
-                Object brand = classObj.getClassBrand();
+            Scriptable scriptable = (Scriptable) instance;
 
-                // 1. Check for private setter first
-                Function setter = classObj.getPrivateSetter(fieldName, brand);
-                if (setter != null) {
-                    setter.call(cx, scope, (Scriptable) instance, new Object[] {value});
-                    return value;
+            // Get the instance's brand (stored on the instance during construction)
+            Object instanceBrand = scriptable.get("_classBrand", scriptable);
+
+            // Check if brand is valid (not NOT_FOUND, not Undefined, not null)
+            boolean hasValidInstanceBrand =
+                    instanceBrand != null
+                            && instanceBrand != Scriptable.NOT_FOUND
+                            && !Undefined.isUndefined(instanceBrand);
+
+            // Traverse the prototype chain to find the class that defines this private field
+            Scriptable current = scriptable;
+            while (current != null) {
+                Object constructor = current.get("constructor", current);
+                if (constructor instanceof NativeClass) {
+                    NativeClass classObj = (NativeClass) constructor;
+
+                    // Check if this class defines the private field
+                    if (classObj.hasPrivateFieldDefinition(fieldName)) {
+                        // Use the instance's brand if valid, otherwise use the defining class's
+                        // brand.
+                        Object brand =
+                                hasValidInstanceBrand ? instanceBrand : classObj.getClassBrand();
+
+                        // 1. Check for private setter first
+                        Function setter = classObj.getPrivateSetter(fieldName, brand);
+                        if (setter != null) {
+                            setter.call(cx, scope, scriptable, new Object[] {value});
+                            return value;
+                        }
+
+                        // 2. Set private field value
+                        classObj.setPrivateField(instance, fieldName, value, brand);
+                        return value;
+                    }
                 }
-
-                // 2. Set private field value
-                classObj.setPrivateField(instance, fieldName, value, brand);
-                return value;
+                // Move up the prototype chain
+                current = current.getPrototype();
             }
         }
         throw constructError(

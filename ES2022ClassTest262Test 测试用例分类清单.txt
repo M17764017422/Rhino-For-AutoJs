@@ -1,0 +1,648 @@
+# ES2022ClassTest262Test 测试用例分类清单
+
+## 一、测试范围概述
+
+ES2022ClassTest262Test 扫描以下目录的测试文件：
+- `language/expressions/class`
+- `language/statements/class`
+- `built-ins/ClassStaticBlockDefinition`
+- `built-ins/ClassStringLookup`
+
+## 二、ES2022 范围内与 Class 核心特性无关的测试用例
+
+### 1. 解构赋值 (destructuring-binding) - 1281 个测试
+
+**ES 版本**: ES6
+**特性标签**: `destructuring-binding`
+**与 Class 关联度**: ❌ 无关（仅借用 class 方法上下文测试解构语法）
+
+**测试目录**:
+- `language/statements/class/dstr/` (1920 文件)
+- `language/expressions/class/dstr/` (1920 文件)
+
+**测试模式**:
+```javascript
+// 测试的是解构赋值，不是 class
+class C {
+  *method([a, b] = [1, 2]) {    // 数组解构
+    return a + b;
+  }
+  method({x, y} = obj) {         // 对象解构
+    return x + y;
+  }
+}
+```
+
+**子类别**:
+| 子类别 | 测试数量 | 说明 |
+|--------|----------|------|
+| `gen-meth-ary-*` | ~400 | 生成器方法数组解构 |
+| `gen-meth-obj-*` | ~200 | 生成器方法对象解构 |
+| `gen-meth-dflt-*` | ~400 | 生成器方法带默认值解构 |
+| `meth-ary-*` | ~200 | 普通方法数组解构 |
+| `meth-obj-*` | ~100 | 普通方法对象解构 |
+| `meth-dflt-*` | ~200 | 普通方法带默认值解构 |
+| `async-*` | ~400 | 异步方法解构 |
+
+---
+
+### 2. 生成器 (generators) - 1156 个测试
+
+**ES 版本**: ES6
+**特性标签**: `generators`
+**与 Class 关联度**: 🟡 低（测试生成器语义，class 只是载体）
+
+**测试目录**:
+- `language/statements/class/gen-method/`
+- `language/statements/class/gen-method-static/`
+- `language/statements/class/dstr/gen-meth-*/`
+- `language/statements/class/definition/methods-gen-*.js`
+
+**测试模式**:
+```javascript
+// 测试的是生成器语法和行为
+class C {
+  *generator() {
+    yield 1;
+    yield 2;
+  }
+  static *staticGenerator() {
+    yield* other;
+  }
+}
+```
+
+**子类别**:
+| 子类别 | 测试数量 | 说明 |
+|--------|----------|------|
+| `yield-*` | ~100 | yield 表达式 |
+| `yield-star-*` | ~80 | yield* 委托 |
+| `dflt-params-*` | ~150 | 默认参数 |
+| `rest-params-*` | ~50 | rest 参数 |
+| `forbidden-ext-*` | ~20 | arguments/caller 访问限制 |
+| `dstr/*` | ~750 | 解构赋值相关 |
+
+---
+
+### 3. 计算属性名 (computed-property-names) - 177 个测试
+
+**ES 版本**: ES6
+**特性标签**: `computed-property-names`
+**与 Class 关联度**: 🟡 低（测试表达式求值，不是 class 语义）
+
+**测试文件模式**:
+- `cpn-class-decl-accessors-computed-property-name-from-*.js`
+- `cpn-class-decl-computed-property-name-from-*.js`
+- `cpn-class-decl-fields-computed-property-name-from-*.js`
+- `cpn-class-decl-fields-methods-computed-property-name-from-*.js`
+
+**测试的表达式类型**:
+| 表达式类型 | 测试数量 | 示例 |
+|------------|----------|------|
+| 算术表达式 | 12 | `[a + b]`, `[a - b]` |
+| 逻辑表达式 | 12 | `[a \|\| b]`, `[a && b]`, `[a ?? b]` |
+| 条件表达式 | 8 | `[cond ? a : b]` |
+| 函数表达式 | 16 | `[function() {}]`, `[() => {}]` |
+| 字面量 | 20 | `[123]`, `["str"]`, `[null]` |
+| 标识符 | 8 | `[identifier]` |
+| yield 表达式 | 4 | `[yield x]` |
+| await 表达式 | 4 | `[await x]` |
+
+---
+
+### 4. 顶层 Await (top-level-await) - 4 个测试
+
+**ES 版本**: ES2022
+**特性标签**: `top-level-await`
+**与 Class 关联度**: ❌ 无关（ES2022 特性但非 class 特性）
+
+**测试文件**:
+| 文件 | 说明 |
+|------|------|
+| `cpn-class-decl-accessors-computed-property-name-from-await-expression.js` | await 作为计算属性名 |
+| `cpn-class-decl-computed-property-name-from-await-expression.js` | await 作为计算属性名 |
+| `cpn-class-decl-fields-computed-property-name-from-await-expression.js` | await 作为字段计算属性名 |
+| `cpn-class-decl-fields-methods-computed-property-name-from-await-expression.js` | await 作为方法计算属性名 |
+
+---
+
+### 5. 标识符名称转义 - ~60 个测试
+
+**ES 版本**: ES5+
+**特性标签**: `class` (但测试的不是 class 语义)
+**与 Class 关联度**: ❌ 无关（测试 Unicode 转义）
+
+**测试文件模式**:
+- `ident-name-method-def-*-escaped.js`
+
+**测试的保留字**:
+```
+class, static, default, extends, implements, private, protected, public,
+interface, package, let, yield, await, break, case, catch, const,
+continue, debugger, delete, do, else, enum, export, finally, for,
+function, if, import, in, instanceof, new, return, super, switch,
+this, throw, try, typeof, var, void, while, with
+```
+
+**测试模式**:
+```javascript
+// 测试 Unicode 转义后的保留字可作为属性名
+class C {
+  def\u0061ult() { return 42; }  // "default"
+  st\u0061tic() { return 1; }    // "static"
+  cl\u0061ss() { return 2; }     // "class"
+}
+```
+
+---
+
+### 6. 作用域规则 (scope) - 20 个测试
+
+**ES 版本**: ES6
+**特性标签**: 无特定标签
+**与 Class 关联度**: 🟡 低（测试函数作用域，class 是载体）
+
+**测试文件模式**:
+- `scope-*.js`
+
+**子类别**:
+| 文件 | 说明 |
+|------|------|
+| `scope-meth-paramsbody-var-*.js` | 方法参数与函数体作用域隔离 |
+| `scope-gen-meth-paramsbody-var-*.js` | 生成器方法作用域 |
+| `scope-static-meth-paramsbody-var-*.js` | 静态方法作用域 |
+| `scope-setter-paramsbody-var-*.js` | setter 作用域 |
+| `scope-name-lex-*.js` | 类名词法绑定 |
+
+---
+
+### 7. 参数默认值 (default-parameters) - ~100 个测试
+
+**ES 版本**: ES6
+**特性标签**: `default-parameters`
+**与 Class 关联度**: ❌ 无关
+
+**测试文件模式**:
+- `params-dflt-*.js`
+- `method-length-dflt.js`
+- `getter-param-dflt.js`
+- `setter-length-dflt.js`
+
+---
+
+### 8. arguments 对象 - 2 个测试
+
+**ES 版本**: ES1+
+**特性标签**: 无
+**与 Class 关联度**: 🟡 低
+
+**测试文件**:
+| 文件 | 说明 |
+|------|------|
+| `arguments/access.js` | arguments 在构造器中的访问 |
+| `arguments/default-constructor.js` | 默认构造器的 arguments |
+
+---
+
+### 9. 严格模式 (strict-mode) - 2 个测试
+
+**ES 版本**: ES5
+**特性标签**: 无
+**与 Class 关联度**: 🟡 低（class 隐式严格模式）
+
+**测试文件**:
+| 文件 | 说明 |
+|------|------|
+| `strict-mode/arguments-callee.js` | arguments.callee 在严格模式禁止 |
+| `strict-mode/with.js` | with 语句禁止 |
+
+---
+
+### 10. 异步函数 (async-functions) - 199 个测试
+
+**ES 版本**: ES2017
+**特性标签**: `async-functions`
+**与 Class 关联度**: 🟡 低（测试 async/await 语义，class 是载体）
+
+**测试目录**:
+- `language/statements/class/async-method/`
+- `language/statements/class/async-method-static/`
+- `language/statements/class/definition/methods-async-*.js`
+
+**测试模式**:
+```javascript
+// 测试的是 async/await 语法和行为
+class C {
+  async method() {
+    const result = await promise;
+    return result;
+  }
+  static async staticMethod() {
+    return await fetch(url);
+  }
+}
+```
+
+**子类别**:
+| 子类别 | 测试数量 | 说明 |
+|--------|----------|------|
+| `await-as-*` | ~30 | await 作为标识符/绑定 |
+| `returns-async-*` | ~20 | async 方法返回值 |
+| `dflt-params-*` | ~20 | 默认参数相关 |
+| `forbidden-ext-*` | ~10 | arguments/caller 访问限制 |
+| `private-async-*` | ~50 | 私有异步方法 |
+
+---
+
+### 11. 异步迭代 (async-iteration) - ~500 个测试
+
+**ES 版本**: ES2018
+**特性标签**: `async-iteration`
+**与 Class 关联度**: 🟡 低（测试异步生成器语义）
+
+**测试目录**:
+- `language/statements/class/async-gen-method/`
+- `language/statements/class/async-gen-method-static/`
+- `language/statements/class/dstr/async-gen-meth-*/`
+
+**测试模式**:
+```javascript
+// 测试的是异步生成器语法和行为
+class C {
+  async *generator() {
+    yield await promise1;
+    yield await promise2;
+  }
+  static async *staticGenerator() {
+    yield* asyncIterable;
+  }
+}
+```
+
+**子类别**:
+| 子类别 | 测试数量 | 说明 |
+|--------|----------|------|
+| `yield-*` | ~50 | yield 表达式 |
+| `yield-star-*` | ~40 | yield* 委托 |
+| `forbidden-ext-*` | ~10 | arguments/caller 限制 |
+| `dstr/*` | ~400 | 解构赋值相关 |
+
+---
+
+### 12. Rest 参数 (rest-parameters) - 24 个测试
+
+**ES 版本**: ES6
+**特性标签**: `rest-parameters`
+**与 Class 关联度**: ❌ 无关（测试函数参数语法）
+
+**测试文件模式**:
+- `*/rest-param-strict-body.js`
+- `*/array-destructuring-param-strict-body.js`
+- `*/object-destructuring-param-strict-body.js`
+
+**测试模式**:
+```javascript
+// 测试的是 rest 参数语法
+class C {
+  method(...args) {
+    return args.length;
+  }
+  static staticMethod(first, ...rest) {
+    return [first, rest];
+  }
+}
+```
+
+---
+
+### 13. 对象 Rest 解构 (object-rest) - 72 个测试
+
+**ES 版本**: ES2018
+**特性标签**: `object-rest`
+**与 Class 关联度**: ❌ 无关（测试解构语法）
+
+**测试文件模式**:
+- `dstr/*/obj-ptrn-rest-*.js`
+
+**测试模式**:
+```javascript
+// 测试的是对象 rest 解构
+class C {
+  method({a, ...rest}) {
+    return rest;
+  }
+}
+```
+
+---
+
+### 14. 子类化内置类 (subclass-builtins) - 36 个测试
+
+**ES 版本**: ES6+
+**特性标签**: 各种内置类标签
+**与 Class 关联度**: ✅ 高（ES6 Class 核心特性）
+
+**测试目录**: `language/statements/class/subclass-builtins/`
+
+**可子类化的内置类**:
+| 内置类 | ES 版本 | 测试文件 |
+|--------|---------|----------|
+| Array | ES6 | `subclass-Array.js` |
+| Promise | ES6 | `subclass-Promise.js` |
+| RegExp | ES6 | `subclass-RegExp.js` |
+| Map | ES6 | `subclass-Map.js` |
+| Set | ES6 | `subclass-Set.js` |
+| WeakMap | ES6 | `subclass-WeakMap.js` |
+| WeakSet | ES6 | `subclass-WeakSet.js` |
+| ArrayBuffer | ES6 | `subclass-ArrayBuffer.js` |
+| DataView | ES6 | `subclass-DataView.js` |
+| TypedArray | ES6 | `subclass-Int8Array.js` 等 |
+| WeakRef | ES2021 | `subclass-WeakRef.js` |
+| AggregateError | ES2021 | `subclass-AggregateError.js` |
+| BigInt | ES2020 | `subclass-BigInt64Array.js` |
+
+---
+
+### 15. Super 关键字 - ~10 个测试
+
+**ES 版本**: ES6
+**特性标签**: 无特定标签
+**与 Class 关联度**: ✅ 高（ES6 Class 核心特性）
+
+**测试目录**: `language/statements/class/super/`
+
+**测试模式**:
+```javascript
+// 测试 super 关键字行为
+class Child extends Parent {
+  constructor() {
+    super();  // super 调用
+  }
+  method() {
+    super.method();  // super 属性访问
+  }
+}
+```
+
+---
+
+## 三、超出 ES2022 范围的测试用例
+
+### 1. 装饰器 (decorators) - 14 个测试
+
+**ES 版本**: ES2023+ (Stage 3 Proposal)
+**特性标签**: `decorators`
+**与 Class 关联度**: ⚠️ 超出 ES2022 范围
+
+**测试目录/文件**:
+```
+decorator/syntax/valid/
+├── decorator-member-expr-identifier-reference.js
+├── decorator-member-expr-identifier-reference-yield.js
+├── decorator-member-expr-decorator-member-expr.js
+├── decorator-call-expr-identifier-reference.js
+├── decorator-call-expr-identifier-reference-yield.js
+├── decorator-parenthesized-expr-identifier-reference.js
+├── decorator-parenthesized-expr-identifier-reference-yield.js
+├── class-element-decorator-*.js (4 个)
+
+decorator/syntax/class-valid/
+├── decorator-member-expr-private-identifier.js
+
+elements/
+├── grammar-field-accessor.js (auto-accessor)
+├── field-definition-accessor-no-line-terminator.js (auto-accessor)
+```
+
+**语法示例**:
+```javascript
+// 类装饰器
+@decorator class C {}
+
+// 方法装饰器
+class C {
+  @decorator method() {}
+}
+
+// 字段装饰器
+class C {
+  @decorator field;
+}
+
+// 命名空间装饰器
+@ns.decorator class C {}
+
+// 装饰器工厂
+@decorator() class C {}
+
+// 私有标识符装饰器
+@obj.#private class D {}
+```
+
+---
+
+### 2. 自动存取器 (auto-accessors) - 2 个测试
+
+**ES 版本**: ES2023
+**特性标签**: `decorators` (命名不一致)
+**与 Class 关联度**: ⚠️ 超出 ES2022 范围
+
+**测试文件**:
+| 文件 | 说明 |
+|------|------|
+| `elements/grammar-field-accessor.js` | accessor 语法验证 |
+| `elements/field-definition-accessor-no-line-terminator.js` | accessor 换行边界 |
+
+**语法示例**:
+```javascript
+class C {
+  accessor x = 1;           // 实例自动存取器
+  static accessor y = 2;    // 静态自动存取器
+  accessor #z = 3;          // 私有自动存取器
+}
+```
+
+**语义等价**:
+```javascript
+class C {
+  #x = 1;
+  get x() { return this.#x; }
+  set x(value) { this.#x = value; }
+}
+```
+
+---
+
+## 四、统计汇总
+
+### 按 ES 版本分类
+
+| ES 版本 | 特性数量 | 测试数量 | 与 Class 关联度 |
+|---------|----------|----------|-----------------|
+| ES5 | 1 | 2 | 低 |
+| ES6 | 8 | ~3000+ | 低/无关 |
+| ES2017 | 1 | 199 | 低 |
+| ES2018 | 2 | ~570 | 低/无关 |
+| ES2020 | 1 | ~10 | 高 |
+| ES2021 | 2 | ~30 | 高/无关 |
+| ES2022 | 1 | 4 | 无关 |
+| ES2023+ | 2 | 16 | 超出范围 |
+
+### 按 Class 关联度分类
+
+| 关联度 | 特性数量 | 测试数量 | 说明 |
+|--------|----------|----------|------|
+| ❌ 无关 | 7 | ~2000 | 完全借用 class 上下文 |
+| 🟡 低 | 6 | ~1700 | class 是载体，测试其他特性 |
+| ✅ 高 | 2 | ~50 | ES6 Class 核心特性 |
+| ⚠️ 超出 ES2022 | 2 | 16 | ES2023+ 特性 |
+
+---
+
+## 五、ES2022 Class 核心特性测试清单
+
+以下测试与 ES2022 Class 核心特性直接相关：
+
+### 1. 公有字段 (class-fields-public)
+- `elements/*-field-*.js`
+- `elements/regular-definitions-*.js`
+- `elements/multiple-definitions-*.js`
+
+### 2. 私有字段 (class-fields-private)
+- `elements/private-*.js`
+- `elements/same-line-private-*.js`
+
+### 3. 私有方法 (class-methods-private)
+- `elements/private-method-*.js`
+- `elements/private-getter-*.js`
+- `elements/private-setter-*.js`
+
+### 4. 静态公有字段 (class-static-fields-public)
+- `elements/static-field-*.js`
+
+### 5. 静态私有字段/方法 (class-static-fields-private, class-static-methods-private)
+- `elements/static-private-*.js`
+
+### 6. 静态初始化块 (class-static-block)
+- `static-init-*.js`
+
+### 7. 私有字段检查 (#field in obj)
+- `built-ins/ClassStringLookup/` 目录
+
+---
+
+## 六、建议
+
+### 1. 如需纯 ES2022 Class 核心特性测试
+
+应排除以下目录/文件：
+```
+**/dstr/**/*.js           # 解构赋值 (3840 文件)
+**/cpn-*.js               # 计算属性名表达式测试
+**/ident-name-*.js        # 标识符名称转义测试
+**/scope-*.js             # 作用域测试
+**/params-dflt-*.js       # 参数默认值测试
+**/decorator/**/*.js      # ES2023 Decorators
+**/*accessor*.js          # ES2023 Auto-Accessors
+**/gen-method/**/*.js     # 生成器方法测试
+**/async-method/**/*.js   # 异步方法测试
+```
+
+### 2. 如需排除非 ES2022 特性
+
+添加到 `UNSUPPORTED_FEATURES`：
+```java
+static final Set<String> UNSUPPORTED_FEATURES =
+    new HashSet<>(Arrays.asList(
+        // ... existing features ...
+        "decorators",           // ES2023+
+        "top-level-await"       // ES2022 但非 class 特性
+    ));
+```
+
+### 3. 创建独立的 ES2022 Class 核心测试类
+
+可考虑创建 `ES2022ClassCoreTest262Test.java`，仅包含：
+- `elements/**/*.js` (class 元素)
+- `static-init-*.js` (静态初始化块)
+- `subclass/**/*.js` (子类化)
+- `super/**/*.js` (super 关键字)
+- `definition/**/*.js` (类定义)
+
+---
+
+## 七、附录：特性标签完整列表
+
+### 已在测试中发现的特性标签
+
+| 标签 | ES 版本 | 测试数量 | 与 Class 关联度 |
+|------|---------|----------|-----------------|
+| `class` | ES6 | ~500 | ✅ 高 |
+| `class-fields-public` | ES2022 | ~200 | ✅ 高 |
+| `class-fields-private` | ES2022 | ~150 | ✅ 高 |
+| `class-methods-private` | ES2022 | ~100 | ✅ 高 |
+| `class-static-fields-public` | ES2022 | ~100 | ✅ 高 |
+| `class-static-fields-private` | ES2022 | ~50 | ✅ 高 |
+| `class-static-methods-private` | ES2022 | ~50 | ✅ 高 |
+| `class-static-block` | ES2022 | ~30 | ✅ 高 |
+| `decorators` | ES2023+ | 14 | ⚠️ 超出 ES2022 |
+| `destructuring-binding` | ES6 | 1281 | ❌ 无关 |
+| `generators` | ES6 | 1156 | 🟡 低 |
+| `computed-property-names` | ES6 | 177 | 🟡 低 |
+| `default-parameters` | ES6 | ~100 | ❌ 无关 |
+| `top-level-await` | ES2022 | 4 | ❌ 无关 |
+| `async-functions` | ES2017 | 199 | 🟡 低 |
+| `async-iteration` | ES2018 | ~500 | 🟡 低 |
+| `Symbol.iterator` | ES6 | ~50 | 🟡 低 |
+| `Symbol.asyncIterator` | ES2018 | ~30 | 🟡 低 |
+| `rest-parameters` | ES6 | 24 | ❌ 无关 |
+| `object-rest` | ES2018 | 72 | ❌ 无关 |
+| `object-spread` | ES2018 | ~20 | ❌ 无关 |
+| `logical-assignment-operators` | ES2021 | ~20 | ❌ 无关 |
+| `exponentiation` | ES2016 | ~20 | ❌ 无关 |
+| `arrow-function` | ES6 | ~100 | ❌ 无关 |
+| `Proxy` | ES6 | ~10 | 🟡 低 |
+| `Symbol` | ES6 | ~50 | 🟡 低 |
+| `Symbol.toPrimitive` | ES6 | ~10 | 🟡 低 |
+| `WeakSet` | ES6 | 1 | 🟡 低 |
+| `WeakRef` | ES2021 | 1 | 🟡 低 |
+| `WeakMap` | ES6 | 1 | 🟡 低 |
+| `TypedArray` | ES6 | ~20 | 🟡 低 |
+| `SharedArrayBuffer` | ES2017 | 1 | 🟡 低 |
+| `Set` | ES6 | 1 | 🟡 低 |
+| `Promise` | ES6 | 1 | 🟡 低 |
+| `Map` | ES6 | 1 | 🟡 低 |
+| `DataView` | ES6 | 1 | 🟡 低 |
+| `BigInt` | ES2020 | 2 | 🟡 低 |
+| `ArrayBuffer` | ES6 | 1 | 🟡 低 |
+| `AggregateError` | ES2021 | 1 | 🟡 低 |
+
+---
+
+## 八、版本历史
+
+| 版本 | 日期 | 修改内容 |
+|------|------|----------|
+| v1.0 | 2026-03-27 | 初始版本 |
+| v1.1 | 2026-03-27 | 补充遗漏特性：async-functions, async-iteration, rest-parameters, object-rest, subclass-builtins, super |
+
+---
+
+## 九、总结
+
+本清单覆盖了 ES2022ClassTest262Test 测试的以下内容：
+
+**已包含（v1.1）**:
+- ✅ 测试目录结构分析
+- ✅ 特性标签搜索统计（28 个标签）
+- ✅ 与 Class 关联度分类（4 级）
+- ✅ ES 版本分类（ES5 ~ ES2023+）
+- ✅ 详细测试文件清单
+- ✅ 排除路径建议
+- ✅ 特性标签完整列表
+- ✅ subclass-builtins 详细说明
+- ✅ super 关键字测试说明
+- ✅ async-functions 详细分类
+- ✅ async-iteration 详细分类
+- ✅ rest-parameters 详细分类
+- ✅ object-rest 详细分类

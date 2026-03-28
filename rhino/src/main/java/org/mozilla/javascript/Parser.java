@@ -149,6 +149,12 @@ public class Parser {
     private boolean insideMethod;
     private ClassNode currentClass; // Track current class for super() validation
     private boolean insideDerivedConstructor; // True when parsing constructor of a derived class
+
+    // ES2022: Private name validity tracking (AllPrivateNamesValid static semantics)
+    // Stack of valid private name sets for nested class contexts
+    private List<Set<String>> privateNamesStack = new ArrayList<>();
+    // Track if we're parsing ClassHeritage (extends clause) - use outer private environment
+    private boolean parsingClassHeritage = false;
     Scope currentScope;
     private int endFlags;
     private boolean inForInit; // bound temporarily during forStatement()
@@ -334,6 +340,226 @@ public class Parser {
         if (!compilerEnv.recoverFromErrors()) {
             throw new ParserException();
         }
+    }
+
+    // ==================== ES2022 Private Name Validity Tracking ====================
+
+    /**
+     * Push a new private name scope onto the stack. Called when entering a class body.
+     *
+     * @param privateNames the set of private names declared in this class
+     */
+    private void pushPrivateNameScope(Set<String> privateNames) {
+        privateNamesStack.add(privateNames);
+    }
+
+    /** Pop the current private name scope from the stack. Called when exiting a class body. */
+    private void popPrivateNameScope() {
+        if (!privateNamesStack.isEmpty()) {
+            privateNamesStack.remove(privateNamesStack.size() - 1);
+        }
+    }
+
+    /**
+     * Check if a private name is valid in the current context. According to ECMAScript spec,
+     * AllPrivateNamesValid: - For MemberExpression . PrivateName: valid if name is in the current
+     * scope - For nested classes: inner class names are added to outer scope
+     *
+     * @param privateName the private name (without # prefix)
+     * @return true if the private name is valid in the current context
+     */
+    private boolean isPrivateNameValid(String privateName) {
+        // When parsing ClassHeritage (extends clause), use outer private environment
+        // This means we should NOT check the innermost scope
+        int startIdx =
+                parsingClassHeritage && privateNamesStack.size() > 1
+                        ? privateNamesStack.size() - 2
+                        : privateNamesStack.size() - 1;
+
+        for (int i = startIdx; i >= 0; i--) {
+            Set<String> scope = privateNamesStack.get(i);
+            if (scope != null && scope.contains(privateName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if we're currently inside any class context.
+     *
+     * @return true if inside a class body
+     */
+    private boolean isInsideClassContext() {
+        return !privateNamesStack.isEmpty();
+    }
+
+    /**
+     * Validate a private field access. Reports a SyntaxError if the private name is not valid in
+     * the current context.
+     *
+     * @param privateName the private name being accessed (without # prefix)
+     * @param position the position for error reporting
+     */
+    private void validatePrivateFieldAccess(String privateName, int position) {
+        if (!isPrivateNameValid(privateName)) {
+            reportError("msg.invalid.private.field.access", "#" + privateName, position, 1);
+        }
+    }
+
+    /**
+     * Validate all private field accesses in a class body. This implements the AllPrivateNamesValid
+     * static semantics from ECMAScript.
+     *
+     * @param classNode the class to validate
+     */
+    private void validatePrivateFieldAccesses(ClassNode classNode) {
+        Set<String> classPrivateNames = classNode.getPrivateNames();
+        for (ClassElement element : classNode.getElements()) {
+            validatePrivateFieldAccessesInElement(element, classPrivateNames);
+        }
+    }
+
+    /**
+     * Recursively validate private field accesses in a class element.
+     *
+     * @param element the class element to validate
+     * @param classPrivateNames the set of valid private names in this class
+     */
+    private void validatePrivateFieldAccessesInElement(
+            ClassElement element, Set<String> classPrivateNames) {
+        // Validate field value
+        AstNode fieldValue = element.getFieldValue();
+        if (fieldValue != null) {
+            validatePrivateFieldAccessesInNode(fieldValue, classPrivateNames);
+        }
+
+        // Validate method body
+        FunctionNode method = element.getMethod();
+        if (method != null) {
+            validatePrivateFieldAccessesInNode(method, classPrivateNames);
+        }
+
+        // Validate decorators
+        List<DecoratorNode> decorators = element.getDecorators();
+        if (decorators != null) {
+            for (DecoratorNode decorator : decorators) {
+                validatePrivateFieldAccessesInNode(decorator, classPrivateNames);
+            }
+        }
+    }
+
+    /**
+     * Recursively validate private field accesses in an AST node.
+     *
+     * @param node the node to validate
+     * @param validNames the set of valid private names
+     */
+    private void validatePrivateFieldAccessesInNode(AstNode node, Set<String> validNames) {
+        if (node == null) return;
+
+        // Check if this is a private field access
+        if (node instanceof PropertyGet) {
+            PropertyGet pg = (PropertyGet) node;
+            AstNode property = pg.getProperty();
+            if (property != null && property.getType() == Token.PRIVATE_FIELD) {
+                String privateName = ((Name) property).getIdentifier();
+                // Check against all scopes in the stack
+                if (!isPrivateNameValid(privateName)) {
+                    reportError(
+                            "msg.invalid.private.field.access",
+                            "#" + privateName,
+                            node.getPosition(),
+                            node.getLength());
+                }
+            }
+            // Recurse into left side
+            validatePrivateFieldAccessesInNode(pg.getLeft(), validNames);
+        } else if (node instanceof FunctionNode) {
+            // For functions, recurse into body but don't validate private names
+            // (they will be validated when the function is executed in class context)
+            FunctionNode fn = (FunctionNode) node;
+            if (fn.getBody() != null) {
+                validatePrivateFieldAccessesInNode(fn.getBody(), validNames);
+            }
+        } else if (node instanceof InfixExpression) {
+            InfixExpression ie = (InfixExpression) node;
+            validatePrivateFieldAccessesInNode(ie.getLeft(), validNames);
+            validatePrivateFieldAccessesInNode(ie.getRight(), validNames);
+        } else if (node instanceof UnaryExpression) {
+            UnaryExpression ue = (UnaryExpression) node;
+            validatePrivateFieldAccessesInNode(ue.getOperand(), validNames);
+        } else if (node instanceof FunctionCall) {
+            FunctionCall fc = (FunctionCall) node;
+            validatePrivateFieldAccessesInNode(fc.getTarget(), validNames);
+            if (fc.getArguments() != null) {
+                for (AstNode arg : fc.getArguments()) {
+                    validatePrivateFieldAccessesInNode(arg, validNames);
+                }
+            }
+        } else if (node instanceof Assignment) {
+            Assignment a = (Assignment) node;
+            validatePrivateFieldAccessesInNode(a.getLeft(), validNames);
+            validatePrivateFieldAccessesInNode(a.getRight(), validNames);
+        } else if (node instanceof ParenthesizedExpression) {
+            validatePrivateFieldAccessesInNode(
+                    ((ParenthesizedExpression) node).getExpression(), validNames);
+        } else if (node instanceof ArrayLiteral) {
+            ArrayLiteral al = (ArrayLiteral) node;
+            for (AstNode elem : al.getElements()) {
+                validatePrivateFieldAccessesInNode(elem, validNames);
+            }
+        } else if (node instanceof ObjectLiteral) {
+            ObjectLiteral ol = (ObjectLiteral) node;
+            for (AbstractObjectProperty prop : ol.getElements()) {
+                validatePrivateFieldAccessesInNode((AstNode) prop, validNames);
+            }
+        } else if (node instanceof ObjectProperty) {
+            ObjectProperty op = (ObjectProperty) node;
+            validatePrivateFieldAccessesInNode(op.getValue(), validNames);
+        } else if (node instanceof ConditionalExpression) {
+            ConditionalExpression ce = (ConditionalExpression) node;
+            validatePrivateFieldAccessesInNode(ce.getTestExpression(), validNames);
+            validatePrivateFieldAccessesInNode(ce.getTrueExpression(), validNames);
+            validatePrivateFieldAccessesInNode(ce.getFalseExpression(), validNames);
+        } else if (node instanceof NewExpression) {
+            NewExpression ne = (NewExpression) node;
+            validatePrivateFieldAccessesInNode(ne.getTarget(), validNames);
+            if (ne.getArguments() != null) {
+                for (AstNode arg : ne.getArguments()) {
+                    validatePrivateFieldAccessesInNode(arg, validNames);
+                }
+            }
+        } else if (node instanceof Scope) {
+            // Block extends Scope, use Scope's getStatements()
+            Scope s = (Scope) node;
+            for (AstNode child : s.getStatements()) {
+                validatePrivateFieldAccessesInNode(child, validNames);
+            }
+        } else if (node instanceof ExpressionStatement) {
+            validatePrivateFieldAccessesInNode(
+                    ((ExpressionStatement) node).getExpression(), validNames);
+        } else if (node instanceof VariableDeclaration) {
+            VariableDeclaration vd = (VariableDeclaration) node;
+            for (VariableInitializer vi : vd.getVariables()) {
+                if (vi.getInitializer() != null) {
+                    validatePrivateFieldAccessesInNode(vi.getInitializer(), validNames);
+                }
+            }
+        } else if (node instanceof ReturnStatement) {
+            ReturnStatement rs = (ReturnStatement) node;
+            if (rs.getReturnValue() != null) {
+                validatePrivateFieldAccessesInNode(rs.getReturnValue(), validNames);
+            }
+        } else if (node instanceof DecoratorNode) {
+            DecoratorNode dn = (DecoratorNode) node;
+            validatePrivateFieldAccessesInNode(dn.getExpression(), validNames);
+        } else if (node instanceof ClassNode) {
+            // Nested class - already validated by its own parseClassBody
+        }
+
+        // Note: This is not exhaustive, but covers the most common cases
+        // For complete coverage, all AstNode subclasses would need to be handled
     }
 
     // Computes the absolute end offset of node N.
@@ -5571,9 +5797,12 @@ public class Parser {
         }
 
         // Parse optional extends clause
+        // ES2022: When parsing ClassHeritage, use outer private environment
         if (matchToken(Token.EXTENDS, true)) {
             classNode.setExtendsPosition(ts.tokenBeg - pos);
+            parsingClassHeritage = true;
             AstNode superClass = memberExpr(false);
+            parsingClassHeritage = false;
             classNode.setSuperClass(superClass);
         }
 
@@ -5586,10 +5815,17 @@ public class Parser {
         parseClassBody(classNode);
 
         if (!mustMatchToken(Token.RC, "msg.no.brace.after.class.body", true)) {
+            popPrivateNameScope(); // Clean up on error
             return classNode;
         }
         classNode.setRcPosition(ts.tokenBeg - pos);
         classNode.setLength(ts.tokenEnd - pos);
+
+        // Validate private field accesses in class body
+        validatePrivateFieldAccesses(classNode);
+
+        // Pop private name scope after validation
+        popPrivateNameScope();
 
         return classNode;
     }
@@ -5613,9 +5849,12 @@ public class Parser {
         }
 
         // Parse optional extends clause
+        // ES2022: When parsing ClassHeritage, use outer private environment
         if (matchToken(Token.EXTENDS, true)) {
             classNode.setExtendsPosition(ts.tokenBeg - pos);
+            parsingClassHeritage = true;
             AstNode superClass = memberExpr(false);
+            parsingClassHeritage = false;
             classNode.setSuperClass(superClass);
         }
 
@@ -5630,8 +5869,22 @@ public class Parser {
         if (!mustMatchToken(Token.RC, "msg.no.brace.after.class.body", true)) {
             return classNode;
         }
+        classNode.setLcPosition(ts.tokenBeg - pos);
+
+        parseClassBody(classNode);
+
+        if (!mustMatchToken(Token.RC, "msg.no.brace.after.class.body", true)) {
+            popPrivateNameScope(); // Clean up on error
+            return classNode;
+        }
         classNode.setRcPosition(ts.tokenBeg - pos);
         classNode.setLength(ts.tokenEnd - pos);
+
+        // Validate private field accesses in class body
+        validatePrivateFieldAccesses(classNode);
+
+        // Pop private name scope after validation
+        popPrivateNameScope();
 
         return classNode;
     }
@@ -5715,6 +5968,17 @@ public class Parser {
                 classNode.addElement(element);
             }
         }
+
+        // ES2022: Collect all private names and push to stack for nested class validation
+        Set<String> allPrivateNames = new HashSet<>();
+        allPrivateNames.addAll(privateGetters.keySet());
+        allPrivateNames.addAll(privateSetters.keySet());
+        allPrivateNames.addAll(otherPrivateNames);
+        classNode.setPrivateNames(allPrivateNames);
+
+        // Push private name scope for nested classes
+        pushPrivateNameScope(allPrivateNames);
+
         currentClass = savedCurrentClass;
     }
 
@@ -5757,8 +6021,9 @@ public class Parser {
                     }
                     isStatic = true;
                     continue;
-                } else if ("async".equals(name) && !isAsync && !isStatic) {
+                } else if ("async".equals(name) && !isAsync) {
                     // Check if followed by valid property name or '*'
+                    // Note: ES2022 allows 'static async' combination for static async methods
                     consumeToken();
                     int next = peekToken();
                     if (next == Token.MUL

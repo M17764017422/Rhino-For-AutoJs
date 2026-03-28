@@ -9,6 +9,7 @@ package org.mozilla.javascript.ast;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import org.mozilla.javascript.Token;
 
 /**
@@ -69,6 +70,9 @@ public class ClassNode extends AstNode {
 
     // Cached references for quick access
     private ClassElement constructorElement;
+
+    // ES2022: Set of private names declared in this class (for AllPrivateNamesValid validation)
+    private Set<String> privateNames = Collections.emptySet();
 
     {
         type = Token.CLASS;
@@ -260,6 +264,26 @@ public class ClassNode extends AstNode {
 
     public void setRcPosition(int rcPosition) {
         this.rcPosition = rcPosition;
+    }
+
+    // ===== ES2022 Private Names =====
+
+    /**
+     * Returns the set of private names declared in this class.
+     *
+     * @return set of private names (without # prefix), empty set if none
+     */
+    public Set<String> getPrivateNames() {
+        return privateNames;
+    }
+
+    /**
+     * Sets the private names declared in this class.
+     *
+     * @param privateNames set of private names (without # prefix)
+     */
+    public void setPrivateNames(Set<String> privateNames) {
+        this.privateNames = privateNames != null ? privateNames : Collections.emptySet();
     }
 
     // ===== Convenience Methods =====

@@ -1,0 +1,205 @@
+======================================================================
+ES2022 Class Test Failure Analysis Report - Batch: negative
+Test Class: ES2022ClassNegativeTest262Test
+======================================================================
+
+Total analyzed: 200
+
+NEGATIVE_TEST : 48 (24%)
+SYNTAX_ERROR : 14 (7%)
+RUNTIME_ERROR : 0 (0%)
+BYTECODE_ERROR : 0 (0%)
+CODEGEN_ERROR : 4 (2%)
+EXPECTED_FEATURE : 0 (0%)
+OTHER : 134 (67%)
+
+RUNTIME_ERROR Sub-categories:
+  Private Field Access: 0
+  Private Method Access: 0
+  Super-related: 0
+  Other Runtime: 0
+
+Mode Breakdown:
+  INTERPRETED mode failures: 101
+  COMPILED mode failures: 99
+
+======================================================================
+ROOT CAUSE ANALYSIS
+======================================================================
+
+1. RUNTIME_ERROR (0 tests)
+   - Main issue: Private field/method access semantics
+   - Error pattern: 'Cannot access private field X on non-class instance'
+   - Error pattern: 'Private field X not found on object'
+   - Likely cause: Incorrect 'this' binding in class contexts
+
+2. SYNTAX_ERROR (14 tests)
+   - Main issue: Parser rejects valid private name syntax
+   - Error pattern: 'syntax error' on private identifiers
+   - Likely cause: Incomplete private name parsing support
+
+3. BYTECODE_ERROR (0 tests)
+   - Main issue: JVM bytecode verification fails
+   - Error pattern: 'Bad type on operand stack'
+   - Error pattern: 'Type X is not assignable to Y'
+   - Affects: COMPILED mode only
+   - Likely cause: Incorrect bytecode generation for private members
+
+4. CODEGEN_ERROR (4 tests)
+   - Main issue: Internal compiler errors
+   - Error pattern: 'IndexOutOfBoundsException: Function index 0 but functions list is null'
+   - Likely cause: Missing function node during code generation
+
+======================================================================
+DETAILED RESULTS
+======================================================================
+
+--- NEGATIVE_TEST (48 tests) ---
+
+File: language\expressions\class\gen-method\forbidden-ext\b1\cls-expr-gen-meth-forbidden-ext-direct-access-prop-arguments.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: missing ; before statement (language\expressions\class\gen-method\forbidden-ext\b1\cls-expr-gen-meth-forbidden-ext-direct-access-prop-arguments.js#34) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.ja
+
+File: language\expressions\class\gen-method\forbidden-ext\b1\cls-expr-gen-meth-forbidden-ext-direct-access-prop-arguments.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: missing ; before statement (language\expressions\class\gen-method\forbidden-ext\b1\cls-expr-gen-meth-forbidden-ext-direct-access-prop-arguments.js#34) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.ja
+
+File: language\expressions\class\gen-method\forbidden-ext\b1\cls-expr-gen-meth-forbidden-ext-direct-access-prop-caller.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: missing ; before statement (language\expressions\class\gen-method\forbidden-ext\b1\cls-expr-gen-meth-forbidden-ext-direct-access-prop-caller.js#34) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:
+
+File: language\expressions\class\gen-method\forbidden-ext\b1\cls-expr-gen-meth-forbidden-ext-direct-access-prop-caller.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: missing ; before statement (language\expressions\class\gen-method\forbidden-ext\b1\cls-expr-gen-meth-forbidden-ext-direct-access-prop-caller.js#34) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:
+
+File: language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-own-prop-caller-get.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: missing ; before statement (language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-own-prop-caller-get.js#61) at org.junit.jupiter.api.AssertionUtils.fail(AssertionU
+
+File: language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-own-prop-caller-get.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: missing ; before statement (language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-own-prop-caller-get.js#61) at org.junit.jupiter.api.AssertionUtils.fail(AssertionU
+
+File: language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-own-prop-caller-value.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: missing ; before statement (language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-own-prop-caller-value.js#61) at org.junit.jupiter.api.AssertionUtils.fail(Assertio
+
+File: language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-own-prop-caller-value.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: missing ; before statement (language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-own-prop-caller-value.js#61) at org.junit.jupiter.api.AssertionUtils.fail(Assertio
+
+File: language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-prop-caller.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: missing ; before statement (language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-prop-caller.js#61) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.jav
+
+File: language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-prop-caller.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: missing ; before statement (language\expressions\class\gen-method\forbidden-ext\b2\cls-expr-gen-meth-forbidden-ext-indirect-access-prop-caller.js#61) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.jav
+
+... and 38 more tests in this category
+
+--- SYNTAX_ERROR (14 tests) ---
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-factory.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-factory.js#31) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.Assert
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-factory.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-factory.js#31) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.Assert
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-factory.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-factory.js#31) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.Assert
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-factory.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-factory.js#31) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.Assert
+
+File: language\expressions\class\private-method-brand-check-multiple-evaluations-of-class-factory.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\private-method-brand-check-multiple-evaluations-of-class-factory.js#31) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.Assert
+
+File: language\expressions\class\private-method-brand-check-multiple-evaluations-of-class-factory.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\private-method-brand-check-multiple-evaluations-of-class-factory.js#31) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.Assert
+
+File: language\expressions\class\private-method-brand-check-multiple-evaluations-of-class-factory.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\private-method-brand-check-multiple-evaluations-of-class-factory.js#31) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.Assert
+
+File: language\expressions\class\private-method-brand-check-multiple-evaluations-of-class-factory.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\private-method-brand-check-multiple-evaluations-of-class-factory.js#31) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.Assert
+
+File: language\expressions\class\private-setter-brand-check-multiple-evaluations-of-class-factory.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\private-setter-brand-check-multiple-evaluations-of-class-factory.js#31) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.Assert
+
+File: language\expressions\class\private-setter-brand-check-multiple-evaluations-of-class-factory.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\private-setter-brand-check-multiple-evaluations-of-class-factory.js#31) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.Assert
+
+... and 4 more tests in this category
+
+--- CODEGEN_ERROR (4 tests) ---
+
+File: language\statements\class\elements\arrow-fnc-init-err-contains-arguments.js
+Mode: INTERPRETED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.CodeGenerator.visitExpression(CodeGenerator.java:564) at org.mozi
+
+File: language\statements\class\elements\arrow-fnc-init-err-contains-arguments.js
+Mode: INTERPRETED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.CodeGenerator.visitExpression(CodeGenerator.java:564) at org.mozi
+
+File: language\statements\class\elements\arrow-fnc-init-err-contains-arguments.js
+Mode: COMPILED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.optimizer.OptFunctionNode.get(OptFunctionNode.java:20) at org.moz
+
+File: language\statements\class\elements\arrow-fnc-init-err-contains-arguments.js
+Mode: COMPILED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.optimizer.OptFunctionNode.get(OptFunctionNode.java:20) at org.moz
+
+--- OTHER (134 tests) ---
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-eval-indirect.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: SyntaxError: syntax error (eval code#1(eval)#9) at language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-eval-indirect.js:34 (createAndInstantiateClass) at language\expressions\class\
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-eval-indirect.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: SyntaxError: syntax error (eval code#1(eval)#9) at language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-eval-indirect.js:34 (createAndInstantiateClass) at language\expressions\class\
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-eval.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: SyntaxError: syntax error (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-eval.js#34(eval)#9) at language\expressions\class\private-getter-brand-check-multiple-evaluations-of-c
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-eval.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: SyntaxError: syntax error (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-eval.js#34(eval)#9) at language\expressions\class\private-getter-brand-check-multiple-evaluations-of-c
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-function-ctor.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: SyntaxError: missing } after function body (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-function-ctor.js#33(Function)#10) at language\expressions\class\private-getter-brand-
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-function-ctor.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: SyntaxError: missing } after function body (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-function-ctor.js#33(Function)#10) at language\expressions\class\private-getter-brand-
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-function-ctor.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: SyntaxError: missing } after function body (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-function-ctor.js#33(Function)#10) at language\expressions\class\private-getter-brand-
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-function-ctor.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: SyntaxError: missing } after function body (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-function-ctor.js#33(Function)#10) at language\expressions\class\private-getter-brand-
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-realm-function-ctor.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: SyntaxError: missing } after function body (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-realm-function-ctor.js#34(Function)#10) at language\expressions\class\private-getter-
+
+File: language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-realm-function-ctor.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: SyntaxError: missing } after function body (language\expressions\class\private-getter-brand-check-multiple-evaluations-of-class-realm-function-ctor.js#34(Function)#10) at language\expressions\class\private-getter-
+
+... and 124 more tests in this category

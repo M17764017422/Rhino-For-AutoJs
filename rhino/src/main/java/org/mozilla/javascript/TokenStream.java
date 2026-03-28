@@ -696,55 +696,93 @@ class TokenStream implements Parser.CurrentPositionReporter {
             // ES2022 private field identifier: #name
             if (c == '#') {
                 c = getChar();
-                // Check if the next character is a valid identifier start
-                if (Character.isUnicodeIdentifierStart(c) || c == '$' || c == '_') {
+
+                // Handle Unicode escape sequence at the start of private field name
+                // e.g., #\\u{6F} or #\\u0041
+                boolean isUnicodeEscapeStart = false;
+                if (c == '\\') {
+                    c = getChar();
+                    if (c == 'u') {
+                        isUnicodeEscapeStart = true;
+                        stringBufferTop = 0;
+                    } else {
+                        // Invalid escape sequence after #
+                        parser.reportError("msg.invalid.private.field");
+                        return Token.ERROR;
+                    }
+                } else if (Character.isUnicodeIdentifierStart(c) || c == '$' || c == '_') {
                     stringBufferTop = 0;
                     addToString(c);
-                    // Read the rest of the identifier
-                    for (; ; ) {
-                        c = getChar();
-                        if (c == '\\') {
-                            // Handle unicode escape in private field name
-                            c = getChar();
-                            if (c == 'u') {
-                                int escapeVal = 0;
-                                if (matchTemplateLiteralChar('{')) {
-                                    for (; ; ) {
-                                        c = getTemplateLiteralChar();
-                                        if (c == '}') break;
-                                        escapeVal = Kit.xDigitToInt(c, escapeVal);
-                                        if (escapeVal < 0) break;
-                                    }
-                                } else {
-                                    for (int i = 0; i != 4; ++i) {
-                                        c = getChar();
-                                        escapeVal = Kit.xDigitToInt(c, escapeVal);
-                                        if (escapeVal < 0) break;
-                                    }
-                                }
-                                if (escapeVal < 0) {
-                                    parser.reportError("msg.invalid.escape");
-                                    return Token.ERROR;
-                                }
-                                addToString(escapeVal);
-                            } else {
-                                parser.reportError("msg.invalid.private.field");
-                                return Token.ERROR;
-                            }
-                        } else if (Character.isUnicodeIdentifierPart(c) || c == '$' || c == '_') {
-                            addToString(c);
-                        } else {
-                            break;
-                        }
-                    }
-                    ungetChar(c);
-                    this.string = getStringFromBuffer();
-                    return Token.PRIVATE_FIELD;
                 } else {
                     // Invalid private field name - # must be followed by identifier
                     parser.reportError("msg.invalid.private.field");
                     return Token.ERROR;
                 }
+
+                // Process the first character (possibly Unicode-escaped)
+                if (isUnicodeEscapeStart) {
+                    int escapeVal = 0;
+                    if (matchChar('{')) {
+                        for (; ; ) {
+                            c = getChar();
+                            if (c == '}') break;
+                            escapeVal = Kit.xDigitToInt(c, escapeVal);
+                            if (escapeVal < 0) break;
+                        }
+                    } else {
+                        for (int i = 0; i != 4; ++i) {
+                            c = getChar();
+                            escapeVal = Kit.xDigitToInt(c, escapeVal);
+                            if (escapeVal < 0) break;
+                        }
+                    }
+                    if (escapeVal < 0 || !Character.isUnicodeIdentifierStart(escapeVal)) {
+                        parser.reportError("msg.invalid.escape");
+                        return Token.ERROR;
+                    }
+                    addToString(escapeVal);
+                }
+
+                // Read the rest of the identifier
+                for (; ; ) {
+                    c = getChar();
+                    if (c == '\\') {
+                        // Handle unicode escape in private field name
+                        c = getChar();
+                        if (c == 'u') {
+                            int escapeVal = 0;
+                            if (matchChar('{')) {
+                                for (; ; ) {
+                                    c = getChar();
+                                    if (c == '}') break;
+                                    escapeVal = Kit.xDigitToInt(c, escapeVal);
+                                    if (escapeVal < 0) break;
+                                }
+                            } else {
+                                for (int i = 0; i != 4; ++i) {
+                                    c = getChar();
+                                    escapeVal = Kit.xDigitToInt(c, escapeVal);
+                                    if (escapeVal < 0) break;
+                                }
+                            }
+                            if (escapeVal < 0) {
+                                parser.reportError("msg.invalid.escape");
+                                return Token.ERROR;
+                            }
+                            addToString(escapeVal);
+                        } else {
+                            parser.reportError("msg.invalid.private.field");
+                            return Token.ERROR;
+                        }
+                    } else if (Character.isUnicodeIdentifierPart(c) || c == '$' || c == '_') {
+                        addToString(c);
+                    } else {
+                        break;
+                    }
+                }
+                ungetChar(c);
+                this.string = getStringFromBuffer();
+                return Token.PRIVATE_FIELD;
             }
 
             // identifier/keyword/instanceof?

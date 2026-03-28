@@ -3753,7 +3753,7 @@ public final class Interpreter extends Icode implements Evaluator {
             double[] sDbl = frame.sDbl;
             int st = state.stackTop;
 
-            // Get all 14 arguments from stack
+            // Get all 15 arguments from stack
             Object staticInitFn = stack[st];
             if (staticInitFn == DOUBLE_MARK) staticInitFn = ScriptRuntime.wrapNumber(sDbl[st]);
 
@@ -3761,50 +3761,54 @@ public final class Interpreter extends Icode implements Evaluator {
             if (instanceFieldInitFn == DOUBLE_MARK)
                 instanceFieldInitFn = ScriptRuntime.wrapNumber(sDbl[st - 1]);
 
-            Object privateFields = stack[st - 2];
+            Object privateStaticFields = stack[st - 2];
+            if (privateStaticFields == DOUBLE_MARK)
+                privateStaticFields = ScriptRuntime.wrapNumber(sDbl[st - 2]);
+
+            Object privateFields = stack[st - 3];
             if (privateFields == DOUBLE_MARK)
-                privateFields = ScriptRuntime.wrapNumber(sDbl[st - 2]);
+                privateFields = ScriptRuntime.wrapNumber(sDbl[st - 3]);
 
-            Object privateStaticSetters = stack[st - 3];
+            Object privateStaticSetters = stack[st - 4];
             if (privateStaticSetters == DOUBLE_MARK)
-                privateStaticSetters = ScriptRuntime.wrapNumber(sDbl[st - 3]);
+                privateStaticSetters = ScriptRuntime.wrapNumber(sDbl[st - 4]);
 
-            Object privateStaticGetters = stack[st - 4];
+            Object privateStaticGetters = stack[st - 5];
             if (privateStaticGetters == DOUBLE_MARK)
-                privateStaticGetters = ScriptRuntime.wrapNumber(sDbl[st - 4]);
+                privateStaticGetters = ScriptRuntime.wrapNumber(sDbl[st - 5]);
 
-            Object privateSetters = stack[st - 5];
+            Object privateSetters = stack[st - 6];
             if (privateSetters == DOUBLE_MARK)
-                privateSetters = ScriptRuntime.wrapNumber(sDbl[st - 5]);
+                privateSetters = ScriptRuntime.wrapNumber(sDbl[st - 6]);
 
-            Object privateGetters = stack[st - 6];
+            Object privateGetters = stack[st - 7];
             if (privateGetters == DOUBLE_MARK)
-                privateGetters = ScriptRuntime.wrapNumber(sDbl[st - 6]);
+                privateGetters = ScriptRuntime.wrapNumber(sDbl[st - 7]);
 
-            Object privateStaticMethods = stack[st - 7];
+            Object privateStaticMethods = stack[st - 8];
             if (privateStaticMethods == DOUBLE_MARK)
-                privateStaticMethods = ScriptRuntime.wrapNumber(sDbl[st - 7]);
+                privateStaticMethods = ScriptRuntime.wrapNumber(sDbl[st - 8]);
 
-            Object privateMethods = stack[st - 8];
+            Object privateMethods = stack[st - 9];
             if (privateMethods == DOUBLE_MARK)
-                privateMethods = ScriptRuntime.wrapNumber(sDbl[st - 8]);
+                privateMethods = ScriptRuntime.wrapNumber(sDbl[st - 9]);
 
-            Object staticMethods = stack[st - 9];
+            Object staticMethods = stack[st - 10];
             if (staticMethods == DOUBLE_MARK)
-                staticMethods = ScriptRuntime.wrapNumber(sDbl[st - 9]);
+                staticMethods = ScriptRuntime.wrapNumber(sDbl[st - 10]);
 
-            Object protoMethods = stack[st - 10];
-            if (protoMethods == DOUBLE_MARK) protoMethods = ScriptRuntime.wrapNumber(sDbl[st - 10]);
+            Object protoMethods = stack[st - 11];
+            if (protoMethods == DOUBLE_MARK) protoMethods = ScriptRuntime.wrapNumber(sDbl[st - 11]);
 
-            Object constructor = stack[st - 11];
-            if (constructor == DOUBLE_MARK) constructor = ScriptRuntime.wrapNumber(sDbl[st - 11]);
+            Object constructor = stack[st - 12];
+            if (constructor == DOUBLE_MARK) constructor = ScriptRuntime.wrapNumber(sDbl[st - 12]);
 
-            Object superClass = stack[st - 12];
-            if (superClass == DOUBLE_MARK) superClass = ScriptRuntime.wrapNumber(sDbl[st - 12]);
+            Object superClass = stack[st - 13];
+            if (superClass == DOUBLE_MARK) superClass = ScriptRuntime.wrapNumber(sDbl[st - 13]);
             if (superClass == null) superClass = Undefined.instance;
 
-            Object classNameObj = stack[st - 13];
-            if (classNameObj == DOUBLE_MARK) classNameObj = ScriptRuntime.wrapNumber(sDbl[st - 13]);
+            Object classNameObj = stack[st - 14];
+            if (classNameObj == DOUBLE_MARK) classNameObj = ScriptRuntime.wrapNumber(sDbl[st - 14]);
             String className = (classNameObj == null) ? "" : ScriptRuntime.toString(classNameObj);
 
             // Call ScriptRuntime.createClass
@@ -3829,10 +3833,12 @@ public final class Interpreter extends Icode implements Evaluator {
                     (Scriptable) privateSetters,
                     (Scriptable) privateStaticGetters,
                     (Scriptable) privateStaticSetters,
+                    (Scriptable) privateFields,
+                    (Scriptable) privateStaticFields,
                     cx);
 
-            // Update stack: 14 args -> 1 result
-            state.stackTop -= 13;
+            // Update stack: 15 args -> 1 result
+            state.stackTop -= 14;
             stack[state.stackTop] = classObj;
 
             return null;

@@ -1805,7 +1805,7 @@ class BodyCodegen {
 
             case Token.NEW_CLASS:
                 // Class creation: call ScriptRuntime.createClass then initPrivateMembers
-                // The NEW_CLASS node structure (14 children):
+                // The NEW_CLASS node structure (15 children):
                 //   child0:  className (NAME or NULL)
                 //   child1:  superClass (expression or NULL)
                 //   child2:  constructor (FUNCTION)
@@ -1818,8 +1818,9 @@ class BodyCodegen {
                 //   child9:  privateStaticGetters (OBJECTLIT)
                 //   child10: privateStaticSetters (OBJECTLIT)
                 //   child11: privateFields (OBJECTLIT)
-                //   child12: instanceFieldInitFn (FUNCTION or NULL)
-                //   child13: staticInitFn (FUNCTION or NULL)
+                //   child12: privateStaticFields (OBJECTLIT)
+                //   child13: instanceFieldInitFn (FUNCTION or NULL)
+                //   child14: staticInitFn (FUNCTION or NULL)
                 {
                     // Allocate a local variable to store the class object temporarily
                     short classObjLocal = getNewWordLocal();
@@ -1837,6 +1838,7 @@ class BodyCodegen {
                     Node privateStaticGettersChild = null;
                     Node privateStaticSettersChild = null;
                     Node privateFieldsChild = null;
+                    Node privateStaticFieldsChild = null;
                     Node instanceFieldInitFnChild = null;
                     Node staticInitFnChild = null;
 
@@ -1883,7 +1885,10 @@ class BodyCodegen {
                         privateFieldsChild = privateStaticSettersChild.getNext();
                     }
                     if (privateFieldsChild != null) {
-                        instanceFieldInitFnChild = privateFieldsChild.getNext();
+                        privateStaticFieldsChild = privateFieldsChild.getNext();
+                    }
+                    if (privateStaticFieldsChild != null) {
+                        instanceFieldInitFnChild = privateStaticFieldsChild.getNext();
                     }
                     if (instanceFieldInitFnChild != null) {
                         staticInitFnChild = instanceFieldInitFnChild.getNext();
@@ -2017,6 +2022,21 @@ class BodyCodegen {
                         cfw.add(ByteCode.ACONST_NULL);
                     }
 
+                    // Push privateFields (OBJECTLIT) - names of declared private fields
+                    if (privateFieldsChild != null) {
+                        generateExpression(privateFieldsChild, node);
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
+                    // Push privateStaticFields (OBJECTLIT) - names and values of static private
+                    // fields
+                    if (privateStaticFieldsChild != null) {
+                        generateExpression(privateStaticFieldsChild, node);
+                    } else {
+                        cfw.add(ByteCode.ACONST_NULL);
+                    }
+
                     // Push Context
                     cfw.addALoad(contextLocal);
 
@@ -2024,6 +2044,8 @@ class BodyCodegen {
                     addScriptRuntimeInvoke(
                             "initPrivateMembers",
                             "(Lorg/mozilla/javascript/NativeClass;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
+                                    + "Lorg/mozilla/javascript/Scriptable;"
                                     + "Lorg/mozilla/javascript/Scriptable;"
                                     + "Lorg/mozilla/javascript/Scriptable;"
                                     + "Lorg/mozilla/javascript/Scriptable;"
@@ -2044,6 +2066,15 @@ class BodyCodegen {
                 // GET/SET/METHOD are unary nodes wrapping function expressions for
                 // getter/setter/method definitions in object literals and class definitions.
                 // Generate the wrapped function expression.
+                if (child != null) {
+                    generateExpression(child, node);
+                }
+                break;
+
+            case Token.COMPUTED_PROPERTY:
+                // COMPUTED_PROPERTY is a wrapper node for computed property key expressions
+                // in object literals (e.g., { [expr]: value }). Just process the child
+                // expression - the wrapper itself doesn't generate any bytecode.
                 if (child != null) {
                     generateExpression(child, node);
                 }
@@ -5266,9 +5297,13 @@ class BodyCodegen {
         //   - Generates right operand
         //   - Executes assignOp(currentValue, right) -> opResult
         // Stack: [instance, currentValue] -> [instance, opResult]
-        generateExpression(child, node);
 
+        // Push fieldName before value to match method signature
+        // Method signature: (instance, fieldName, value, cx, scope)
         cfw.addPush(fieldNameNode.getString());
+
+        generateExpression(child, node); // value
+
         cfw.addALoad(contextLocal);
         cfw.addALoad(variableObjectLocal);
 

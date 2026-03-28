@@ -827,6 +827,9 @@ public final class IRFactory {
             List<Node> privateStaticGetterValues = new ArrayList<>();
             List<Object> privateStaticSetterKeys = new ArrayList<>();
             List<Node> privateStaticSetterValues = new ArrayList<>();
+            // Separate static private fields from instance private fields
+            List<Object> privateStaticFieldKeys = new ArrayList<>();
+            List<Node> privateStaticFieldValues = new ArrayList<>();
 
             FunctionNode constructor = null;
 
@@ -937,17 +940,62 @@ public final class IRFactory {
                     // Check if this is a private field
                     if (element.isPrivate()) {
                         // Private fields need special handling - stored in
-                        // NativeClass.privateFieldStorage
-                        if (element.isStatic()) {
-                            // Static private field - needs to be initialized via NativeClass
-                            privateFieldKeys.add(keyString != null ? keyString : keyNode);
-                            privateFieldValues.add(valueNode);
+                        // NativeClass.privateFieldStorage or staticPrivateFields
+
+                        // Get the field name - for private fields, keyString should always be
+                        // non-null
+                        // since private field names are identifiers (not computed)
+                        String privateFieldName;
+                        if (keyString != null) {
+                            privateFieldName = keyString;
+                        } else if (keyNode.getType() == Token.STRING) {
+                            privateFieldName = keyNode.getString();
                         } else {
-                            // Instance private field
-                            privateFieldKeys.add(keyString != null ? keyString : keyNode);
-                            privateFieldValues.add(valueNode);
+                            // Fallback - should not happen for private fields
+                            privateFieldName = keyNode.toString();
+                        }
+
+                        if (element.isStatic()) {
+                            // Static private field - stored in NativeClass.staticPrivateFields
+                            privateStaticFieldKeys.add(privateFieldName);
+                            privateStaticFieldValues.add(valueNode);
+                        } else {
+                            // Instance private field - stored in NativeClass.privateFieldStorage
+                            // Register the field name for hasPrivateFieldDefinition check
+                            privateFieldKeys.add(privateFieldName);
+                            // For instance fields, we don't store the value in privateFields
+                            // Instead, we generate initialization code in the constructor
+                            privateFieldValues.add(new Node(Token.UNDEFINED));
+
+                            // Generate initialization code for instance private fields
+                            // Create: this.#fieldName = <valueNode>
+                            KeywordLiteral thisLiteral = new KeywordLiteral();
+                            thisLiteral.setType(Token.THIS);
+                            Node thisNode = transform(thisLiteral);
+                            Node fieldNameNode = Node.newString(Token.STRING, privateFieldName);
+
+                            // SET_PRIVATE_FIELD takes (instance, fieldName, value) as children
+                            Node setPrivateField =
+                                    new Node(
+                                            Token.SET_PRIVATE_FIELD,
+                                            thisNode,
+                                            fieldNameNode,
+                                            valueNode);
+
+                            Node fieldInit = new Node(Token.EXPR_VOID, setPrivateField);
+                            instanceFields.addChildToBack(fieldInit);
                         }
                         continue; // Skip adding to public instanceFields
+                    }
+
+                    // Create left-hand side node: this[key] for computed, this.key for regular
+                    Node lhsNode;
+                    if (element.isComputed()) {
+                        // Computed property key: use GETELEM (this[expr])
+                        lhsNode = new Node(Token.GETELEM, new Node(Token.THIS), keyNode);
+                    } else {
+                        // Regular property key: use GETPROP (this.key)
+                        lhsNode = new Node(Token.GETPROP, new Node(Token.THIS), keyNode);
                     }
 
                     if (element.isStatic()) {
@@ -955,26 +1003,14 @@ public final class IRFactory {
                         Node fieldInit =
                                 new Node(
                                         Token.EXPR_VOID,
-                                        createAssignment(
-                                                Token.ASSIGN,
-                                                new Node(
-                                                        Token.GETPROP,
-                                                        new Node(Token.THIS),
-                                                        keyNode),
-                                                valueNode));
+                                        createAssignment(Token.ASSIGN, lhsNode, valueNode));
                         staticInitNodes.add(fieldInit);
                     } else {
                         // Instance field - will be injected into constructor
                         Node fieldInit =
                                 new Node(
                                         Token.EXPR_VOID,
-                                        createAssignment(
-                                                Token.ASSIGN,
-                                                new Node(
-                                                        Token.GETPROP,
-                                                        new Node(Token.THIS),
-                                                        keyNode),
-                                                valueNode));
+                                        createAssignment(Token.ASSIGN, lhsNode, valueNode));
                         instanceFields.addChildToBack(fieldInit);
                     }
                 } else if (element.isStaticBlock()) {
@@ -1045,8 +1081,12 @@ public final class IRFactory {
                     buildPrivateMembersObjectLit(
                             privateStaticSetterKeys, privateStaticSetterValues);
 
-            // Private fields (combined for instance and static - will be differentiated at runtime)
+            // Private instance fields - stored in NativeClass.privateFieldStorage
             Node privateFields = buildPrivateMembersObjectLit(privateFieldKeys, privateFieldValues);
+
+            // Private static fields - stored in NativeClass.staticPrivateFields
+            Node privateStaticFields =
+                    buildPrivateMembersObjectLit(privateStaticFieldKeys, privateStaticFieldValues);
 
             // Handle constructor
             Node ctorNode;
@@ -1069,6 +1109,7 @@ public final class IRFactory {
             classIRNode.addChildToBack(privateStaticGetters);
             classIRNode.addChildToBack(privateStaticSetters);
             classIRNode.addChildToBack(privateFields);
+            classIRNode.addChildToBack(privateStaticFields);
 
             // Create instance field initializer function
             Node instanceFieldInitFn = createFieldInitializerFunction(instanceFields);
@@ -3328,6 +3369,7 @@ public final class IRFactory {
             case Token.GETPROP:
             case Token.GETELEM:
             case Token.GET_REF:
+            case Token.GET_PRIVATE_FIELD:
                 return node;
             case Token.CALL:
                 node.setType(Token.REF_CALL);

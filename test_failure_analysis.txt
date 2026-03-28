@@ -1,0 +1,274 @@
+======================================================================
+ES2022 Class Test Failure Analysis Report
+======================================================================
+
+Total analyzed: 500
+
+NEGATIVE_TEST : 0 (0%)
+SYNTAX_ERROR : 105 (21%)
+RUNTIME_ERROR : 246 (49.2%)
+BYTECODE_ERROR : 91 (18.2%)
+CODEGEN_ERROR : 36 (7.2%)
+EXPECTED_FEATURE : 0 (0%)
+OTHER : 22 (4.4%)
+
+RUNTIME_ERROR Sub-categories:
+  Private Field Access: 101
+  Private Method Access: 65
+  Super-related: 80
+  Other Runtime: 0
+
+Mode Breakdown:
+  INTERPRETED mode failures: 234
+  COMPILED mode failures: 266
+
+======================================================================
+ROOT CAUSE ANALYSIS
+======================================================================
+
+1. RUNTIME_ERROR (246 tests - 49.2%)
+   - Main issue: Private field/method access semantics
+   - Error pattern: 'Cannot access private field X on non-class instance'
+   - Error pattern: 'Private field X not found on object'
+   - Likely cause: Incorrect 'this' binding in class contexts
+
+2. SYNTAX_ERROR (105 tests - 21%)
+   - Main issue: Parser rejects valid private name syntax
+   - Error pattern: 'syntax error' on private identifiers
+   - Likely cause: Incomplete private name parsing support
+
+3. BYTECODE_ERROR (91 tests - 18.2%)
+   - Main issue: JVM bytecode verification fails
+   - Error pattern: 'Bad type on operand stack'
+   - Error pattern: 'Type X is not assignable to Y'
+   - Affects: COMPILED mode only
+   - Likely cause: Incorrect bytecode generation for private members
+
+4. CODEGEN_ERROR (36 tests - 11.6%)
+   - Main issue: Internal compiler errors
+   - Error pattern: 'IndexOutOfBoundsException: Function index 0 but functions list is null'
+   - Likely cause: Missing function node during code generation
+
+======================================================================
+DETAILED RESULTS
+======================================================================
+
+--- SYNTAX_ERROR (105 tests) ---
+
+File: language\expressions\class\elements\after-same-line-gen-rs-static-method-privatename-identifier.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\elements\after-same-line-gen-rs-static-method-privatename-identifier.js#60) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.As
+
+File: language\expressions\class\elements\after-same-line-gen-rs-static-privatename-identifier-alt-by-classname.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\elements\after-same-line-gen-rs-static-privatename-identifier-alt-by-classname.js#60) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupi
+
+File: language\expressions\class\elements\after-same-line-gen-rs-static-privatename-identifier-alt-by-classname.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\elements\after-same-line-gen-rs-static-privatename-identifier-alt-by-classname.js#60) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupi
+
+File: language\expressions\class\elements\multiple-definitions-rs-static-generator-method-privatename-identifier-alt.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\elements\multiple-definitions-rs-static-generator-method-privatename-identifier-alt.js#65) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit
+
+File: language\expressions\class\elements\multiple-definitions-rs-static-generator-method-privatename-identifier-alt.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\elements\multiple-definitions-rs-static-generator-method-privatename-identifier-alt.js#65) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit
+
+File: language\expressions\class\elements\multiple-definitions-rs-static-generator-method-privatename-identifier.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\elements\multiple-definitions-rs-static-generator-method-privatename-identifier.js#65) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jup
+
+File: language\expressions\class\elements\multiple-definitions-rs-static-generator-method-privatename-identifier.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\elements\multiple-definitions-rs-static-generator-method-privatename-identifier.js#65) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jup
+
+File: language\expressions\class\elements\multiple-definitions-rs-static-method-privatename-identifier-alt.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\elements\multiple-definitions-rs-static-method-privatename-identifier-alt.js#62) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.a
+
+File: language\expressions\class\elements\multiple-definitions-rs-static-method-privatename-identifier-alt.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\elements\multiple-definitions-rs-static-method-privatename-identifier-alt.js#62) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.a
+
+File: language\expressions\class\elements\multiple-definitions-rs-static-method-privatename-identifier.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: syntax error (language\expressions\class\elements\multiple-definitions-rs-static-method-privatename-identifier.js#62) at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38) at org.junit.jupiter.api.A
+
+... and 95 more tests in this category
+
+--- RUNTIME_ERROR (246 tests) ---
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-getter-alt.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: ReferenceError: Cannot access private method '$' outside class (language\expressions\class\elements\multiple-definitions-rs-private-getter-alt.js#85) at language\expressions\class\elements\multiple-definitions-rs-
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-getter-alt.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: ReferenceError: Cannot access private method '$' outside class (language\expressions\class\elements\multiple-definitions-rs-private-getter-alt.js#85) at language\expressions\class\elements\multiple-definitions-rs-
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-getter.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: ReferenceError: Cannot access private method '$' outside class (language\expressions\class\elements\multiple-definitions-rs-private-getter.js#85) at language\expressions\class\elements\multiple-definitions-rs-priv
+
+File: language\expressions\class\elements\after-same-line-gen-rs-static-privatename-identifier-alt-by-classname.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: TypeError: Cannot access private field '$' on non-class instance (language\expressions\class\elements\after-same-line-gen-rs-static-privatename-identifier-alt-by-classname.js#62) at language\expressions\class\elem
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-getter.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: ReferenceError: Cannot access private method '$' outside class (language\expressions\class\elements\multiple-definitions-rs-private-getter.js#85) at language\expressions\class\elements\multiple-definitions-rs-priv
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-method-alt.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: ReferenceError: Private field '$_' not found on object (language\expressions\class\elements\multiple-definitions-rs-private-method-alt.js#62) at language\expressions\class\elements\multiple-definitions-rs-private-
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-method-alt.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: ReferenceError: Private field '$_' not found on object (language\expressions\class\elements\multiple-definitions-rs-private-method-alt.js#62) at language\expressions\class\elements\multiple-definitions-rs-private-
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-method.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: ReferenceError: Private field '$_' not found on object (language\expressions\class\elements\multiple-definitions-rs-private-method.js#62) at language\expressions\class\elements\multiple-definitions-rs-private-meth
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-method.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: ReferenceError: Private field '$_' not found on object (language\expressions\class\elements\multiple-definitions-rs-private-method.js#62) at language\expressions\class\elements\multiple-definitions-rs-private-meth
+
+File: language\expressions\class\elements\multiple-definitions-rs-privatename-identifier-initializer-alt.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: ReferenceError: Cannot access private method '$' outside class (language\expressions\class\elements\multiple-definitions-rs-privatename-identifier-initializer-alt.js#65) at language\expressions\class\elements\mult
+
+... and 236 more tests in this category
+
+--- BYTECODE_ERROR (91 tests) ---
+
+File: language\expressions\class\elements\multiple-definitions-private-names.js
+Mode: COMPILED
+Error: java.lang.VerifyError: Bad type on operand stack Exception Details: Location: org/mozilla/javascript/gen/language_expressions_class_elements_multiple_definitions_private_names_js_336._c_x_3(Lorg/mozilla/javascript/Context;Lorg/mozilla/javascript/JSFu
+
+File: language\expressions\class\elements\multiple-definitions-private-names.js
+Mode: COMPILED
+Error: java.lang.VerifyError: Bad type on operand stack Exception Details: Location: org/mozilla/javascript/gen/language_expressions_class_elements_multiple_definitions_private_names_js_341._c_x_3(Lorg/mozilla/javascript/Context;Lorg/mozilla/javascript/JSFu
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-getter-alt.js
+Mode: COMPILED
+Error: java.lang.VerifyError: Bad type on operand stack Exception Details: Location: org/mozilla/javascript/gen/language_expressions_class_elements_multiple_definitions_rs_private_getter_alt_js_347._c_ZW__J_14(Lorg/mozilla/javascript/Context;Lorg/mozilla/ja
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-getter-alt.js
+Mode: COMPILED
+Error: java.lang.VerifyError: Bad type on operand stack Exception Details: Location: org/mozilla/javascript/gen/language_expressions_class_elements_multiple_definitions_rs_private_getter_alt_js_346._c_ZW__J_14(Lorg/mozilla/javascript/Context;Lorg/mozilla/ja
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-getter.js
+Mode: COMPILED
+Error: java.lang.VerifyError: Bad type on operand stack Exception Details: Location: org/mozilla/javascript/gen/language_expressions_class_elements_multiple_definitions_rs_private_getter_js_349._c_ZW_‌_NJ_13(Lorg/mozilla/javascript/Context;Lorg/mozilla/java
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-getter.js
+Mode: COMPILED
+Error: java.lang.VerifyError: Bad type on operand stack Exception Details: Location: org/mozilla/javascript/gen/language_expressions_class_elements_multiple_definitions_rs_private_getter_js_350._c_ZW_‌_NJ_13(Lorg/mozilla/javascript/Context;Lorg/mozilla/java
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-method-alt.js
+Mode: COMPILED
+Error: java.lang.VerifyError: Bad type on operand stack Exception Details: Location: org/mozilla/javascript/gen/language_expressions_class_elements_multiple_definitions_rs_private_method_alt_js_351._c_ZW__J_14(Lorg/mozilla/javascript/Context;Lorg/mozilla/ja
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-method-alt.js
+Mode: COMPILED
+Error: java.lang.VerifyError: Bad type on operand stack Exception Details: Location: org/mozilla/javascript/gen/language_expressions_class_elements_multiple_definitions_rs_private_method_alt_js_348._c_ZW__J_14(Lorg/mozilla/javascript/Context;Lorg/mozilla/ja
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-method.js
+Mode: COMPILED
+Error: java.lang.VerifyError: Bad type on operand stack Exception Details: Location: org/mozilla/javascript/gen/language_expressions_class_elements_multiple_definitions_rs_private_method_js_352._c_ZW_‌_NJ_13(Lorg/mozilla/javascript/Context;Lorg/mozilla/java
+
+File: language\expressions\class\elements\multiple-definitions-rs-private-method.js
+Mode: COMPILED
+Error: java.lang.VerifyError: Bad type on operand stack Exception Details: Location: org/mozilla/javascript/gen/language_expressions_class_elements_multiple_definitions_rs_private_method_js_353._c_ZW_‌_NJ_13(Lorg/mozilla/javascript/Context;Lorg/mozilla/java
+
+... and 81 more tests in this category
+
+--- CODEGEN_ERROR (36 tests) ---
+
+File: language\expressions\class\elements\nested-arrow-fnc-init-err-contains-arguments.js
+Mode: INTERPRETED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.CodeGenerator.visitExpression(CodeGenerator.java:564) at org.mozi
+
+File: language\expressions\class\elements\nested-arrow-fnc-init-err-contains-arguments.js
+Mode: INTERPRETED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.CodeGenerator.visitExpression(CodeGenerator.java:564) at org.mozi
+
+File: language\expressions\class\elements\nested-arrow-fnc-init-err-contains-arguments.js
+Mode: COMPILED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.optimizer.OptFunctionNode.get(OptFunctionNode.java:20) at org.moz
+
+File: language\expressions\class\elements\nested-arrow-fnc-init-err-contains-arguments.js
+Mode: COMPILED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.optimizer.OptFunctionNode.get(OptFunctionNode.java:20) at org.moz
+
+File: language\expressions\class\elements\nested-comp-name-init-err-contains-arguments.js
+Mode: INTERPRETED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.CodeGenerator.visitExpression(CodeGenerator.java:564) at org.mozi
+
+File: language\expressions\class\elements\nested-comp-name-init-err-contains-arguments.js
+Mode: INTERPRETED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.CodeGenerator.visitExpression(CodeGenerator.java:564) at org.mozi
+
+File: language\expressions\class\elements\nested-comp-name-init-err-contains-arguments.js
+Mode: COMPILED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.optimizer.OptFunctionNode.get(OptFunctionNode.java:20) at org.moz
+
+File: language\expressions\class\elements\nested-comp-name-init-err-contains-arguments.js
+Mode: COMPILED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.optimizer.OptFunctionNode.get(OptFunctionNode.java:20) at org.moz
+
+File: language\expressions\class\elements\nested-direct-eval-err-contains-arguments.js
+Mode: INTERPRETED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.CodeGenerator.visitExpression(CodeGenerator.java:564) at org.mozi
+
+File: language\expressions\class\elements\nested-direct-eval-err-contains-arguments.js
+Mode: INTERPRETED
+Error: java.lang.IndexOutOfBoundsException: Function index 0 but functions list is null at org.mozilla.javascript.ast.ScriptNode.getFunctionNode(ScriptNode.java:158) at org.mozilla.javascript.CodeGenerator.visitExpression(CodeGenerator.java:564) at org.mozi
+
+... and 26 more tests in this category
+
+--- OTHER (22 tests) ---
+
+File: language\expressions\class\elements\nested-private-arrow-fnc-init-err-contains-arguments.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: Test262: This statement should not be evaluated. ==> expected: <SyntaxError> but was: <Test262> at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151) at org.junit.jupiter.api.Ass
+
+File: language\expressions\class\elements\nested-private-arrow-fnc-init-err-contains-arguments.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: Test262: This statement should not be evaluated. ==> expected: <SyntaxError> but was: <Test262> at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151) at org.junit.jupiter.api.Ass
+
+File: language\expressions\class\elements\nested-private-arrow-fnc-init-err-contains-arguments.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: Test262: This statement should not be evaluated. ==> expected: <SyntaxError> but was: <Test262> at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151) at org.junit.jupiter.api.Ass
+
+File: language\expressions\class\elements\nested-private-arrow-fnc-init-err-contains-arguments.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: Test262: This statement should not be evaluated. ==> expected: <SyntaxError> but was: <Test262> at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151) at org.junit.jupiter.api.Ass
+
+File: language\expressions\class\elements\nested-private-direct-eval-err-contains-arguments.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: Test262Error: Expected a SyntaxError but got a ReferenceError (test262/harness/assert.js#95) at test262/harness/assert.js:95 (anonymous) at language\expressions\class\elements\nested-private-direct-eval-err-contai
+
+File: language\expressions\class\elements\nested-private-direct-eval-err-contains-arguments.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: Test262Error: Expected a SyntaxError but got a ReferenceError (test262/harness/assert.js#95) at test262/harness/assert.js:95 (anonymous) at language\expressions\class\elements\nested-private-direct-eval-err-contai
+
+File: language\expressions\class\elements\nested-private-direct-eval-err-contains-arguments.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: Test262Error: Expected a SyntaxError but got a ReferenceError (test262/harness/assert.js#95) at test262/harness/assert.js:95 (anonymous) at language\expressions\class\elements\nested-private-direct-eval-err-contai
+
+File: language\expressions\class\elements\nested-private-direct-eval-err-contains-arguments.js
+Mode: COMPILED
+Error: org.opentest4j.AssertionFailedError: Test262Error: Expected a SyntaxError but got a ReferenceError (test262/harness/assert.js#95) at test262/harness/assert.js:95 (anonymous) at language\expressions\class\elements\nested-private-direct-eval-err-contai
+
+File: language\expressions\class\elements\nested-private-literal-name-init-err-contains-arguments.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: Test262: This statement should not be evaluated. ==> expected: <SyntaxError> but was: <Test262> at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151) at org.junit.jupiter.api.Ass
+
+File: language\expressions\class\elements\nested-private-literal-name-init-err-contains-arguments.js
+Mode: INTERPRETED
+Error: org.opentest4j.AssertionFailedError: Test262: This statement should not be evaluated. ==> expected: <SyntaxError> but was: <Test262> at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151) at org.junit.jupiter.api.Ass
+
+... and 12 more tests in this category

@@ -1,0 +1,55 @@
+======================================================================
+ES2022 Class Test Failure Analysis Report - Batch: core
+Test Class: ES2022ClassCoreTest262Test
+======================================================================
+
+Total analyzed: 0
+
+NEGATIVE_TEST : 0 (0%)
+SYNTAX_ERROR : 0 (0%)
+RUNTIME_ERROR : 0 (0%)
+BYTECODE_ERROR : 0 (0%)
+CODEGEN_ERROR : 0 (0%)
+EXPECTED_FEATURE : 0 (0%)
+OTHER : 0 (0%)
+
+RUNTIME_ERROR Sub-categories:
+  Private Field Access: 0
+  Private Method Access: 0
+  Super-related: 0
+  Other Runtime: 0
+
+Mode Breakdown:
+  INTERPRETED mode failures: 0
+  COMPILED mode failures: 0
+
+======================================================================
+ROOT CAUSE ANALYSIS
+======================================================================
+
+1. RUNTIME_ERROR (0 tests)
+   - Main issue: Private field/method access semantics
+   - Error pattern: 'Cannot access private field X on non-class instance'
+   - Error pattern: 'Private field X not found on object'
+   - Likely cause: Incorrect 'this' binding in class contexts
+
+2. SYNTAX_ERROR (0 tests)
+   - Main issue: Parser rejects valid private name syntax
+   - Error pattern: 'syntax error' on private identifiers
+   - Likely cause: Incomplete private name parsing support
+
+3. BYTECODE_ERROR (0 tests)
+   - Main issue: JVM bytecode verification fails
+   - Error pattern: 'Bad type on operand stack'
+   - Error pattern: 'Type X is not assignable to Y'
+   - Affects: COMPILED mode only
+   - Likely cause: Incorrect bytecode generation for private members
+
+4. CODEGEN_ERROR (0 tests)
+   - Main issue: Internal compiler errors
+   - Error pattern: 'IndexOutOfBoundsException: Function index 0 but functions list is null'
+   - Likely cause: Missing function node during code generation
+
+======================================================================
+DETAILED RESULTS
+======================================================================

@@ -662,8 +662,9 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
                     // child[9]: privateStaticGetters (OBJECTLIT)
                     // child[10]: privateStaticSetters (OBJECTLIT)
                     // child[11]: privateFields (OBJECTLIT)
-                    // child[12]: instanceFieldInitFn (FUNCTION)
-                    // child[13]: staticInitFn (FUNCTION)
+                    // child[12]: privateStaticFields (OBJECTLIT)
+                    // child[13]: instanceFieldInitFn (FUNCTION)
+                    // child[14]: staticInitFn (FUNCTION)
 
                     // Visit className
                     visitExpression(child, 0);
@@ -713,6 +714,10 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
                     visitExpression(child, 0);
                     child = child.getNext();
 
+                    // Visit privateStaticFields
+                    visitExpression(child, 0);
+                    child = child.getNext();
+
                     // Visit instanceFieldInitFn
                     visitExpression(child, 0);
                     child = child.getNext();
@@ -722,8 +727,8 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
 
                     // Call ScriptRuntime.createClass + initPrivateMembers
                     addToken(Token.NEW_CLASS);
-                    // Stack: 14 args -> 1 result
-                    stackChange(-13);
+                    // Stack: 15 args -> 1 result
+                    stackChange(-14);
                 }
                 break;
 
@@ -1328,6 +1333,13 @@ class CodeGenerator<T extends ScriptOrFn<T>> extends Icode {
                 visitExpression(child, 0);
                 addToken(Token.SET_PRIVATE_FIELD_OP);
                 stackChange(-2); // 3 args -> 1 result
+                break;
+
+            case Token.COMPUTED_PROPERTY:
+                // COMPUTED_PROPERTY is a wrapper node for computed property key expressions
+                // in object literals (e.g., { [expr]: value }). Just process the child
+                // expression - the wrapper itself doesn't generate any bytecode.
+                visitExpression(child, 0);
                 break;
 
             default:
